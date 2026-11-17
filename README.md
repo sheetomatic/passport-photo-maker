@@ -58,6 +58,8 @@ Open **https://sheetomatic.github.io/passport-photo-maker/** and add it to your 
 
 The install prompt is available on phones in the header. Once installed, the app opens full-screen without browser chrome and the shell works offline; face detection is cached after its first use.
 
+![Install on iPhone](screenshots/app-mobile-install.png)
+
 For local LAN testing, `npm run dev:lan` prints the phone URL (same Wi-Fi; allow incoming connections if macOS asks).
 
 - **Take Photo** uses the phone's native camera through `<input type="file" capture="user">`. That works over plain HTTP and lets the phone switch cameras and confirm/retake in its own camera UI.
@@ -228,6 +230,7 @@ Run `npm run test:e2e` (real Chrome, headless):
 - **Mobile emulation** (iPhone UA, touch, 390 × 844): Take Photo/Choose Photo visible, `capture="user"` camera input path loads the photo, Retake visible, no horizontal overflow.
 - **Mobile share path**: stubbed Web Share receives a real `application/pdf` File of the print sheet.
 - **Mobile print fallback**: with sharing disabled, the direct print portal opens with six 35 × 45 mm photos, measured in print media, and produces exactly one A4 page.
+- **Live GitHub Pages deploy**: installability errors empty, service worker controlling the page, six photos and face detection working on the deployed HTTPS origin, and an offline reload rendering the app shell.
 - Face detection blocked at the network layer → warning status, six-photo manual flow still works.
 - **PWA installability** via Chrome's `Page.getInstallabilityErrors`: no errors; standalone manifest, three icons and a service worker.
 - **Offline launch**: after service-worker activation, a reload with networking disabled still renders the app shell.
