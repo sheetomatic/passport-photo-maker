@@ -1,0 +1,18 @@
+{
+  "name": "passport-photo-maker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Browser-only six-up passport photo maker: 35 x 45 mm photos on one A4 portrait sheet.",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "test": "node --test tests/unit/*.test.mjs",
+    "test:e2e": "node tests/e2e.mjs",
+    "test:all": "node --test tests/unit/*.test.mjs && node tests/e2e.mjs",
+    "dev:lan": "node server.mjs --host 0.0.0.0"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^24.10.0"
+  }
+}

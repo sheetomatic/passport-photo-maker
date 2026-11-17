@@ -1,0 +1,53 @@
+{
+  "id": "./",
+  "name": "Passport Photo Maker",
+  "short_name": "Passport Pix",
+  "description": "Create six 35 × 45 mm passport photos on one A4 sheet. Photos and face detection stay on your device.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#f5f4f1",
+  "theme_color": "#f5f4f1",
+  "categories": ["photo", "utilities", "productivity"],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "./screenshots/app-mobile.png",
+      "sizes": "780x1688",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "A4 preview on a phone"
+    },
+    {
+      "src": "./screenshots/app-desktop.png",
+      "sizes": "1440x1000",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Print layout controls and A4 preview"
+    }
+  ]
+}
