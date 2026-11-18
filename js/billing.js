@@ -270,10 +270,13 @@ export function createBilling({ toast = () => {} } = {}) {
       els.account.hidden = false;
       els.account.textContent = state.access?.isPro
         ? "Pro"
-        : state.token
-          ? "Account"
-          : "Sign in";
+        : state.access?.isTrial
+          ? "Trial"
+          : state.token
+            ? "Account"
+            : "Sign in";
       els.account.classList.toggle("is-pro", Boolean(state.access?.isPro));
+      els.account.classList.toggle("is-trial", Boolean(state.access?.isTrial));
     }
 
     if (els.strip) {

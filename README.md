@@ -304,9 +304,9 @@ Redeploy after changes:
 git add . && git commit -m "Update app" && git push
 ```
 
-The shell is versioned twice for safe upgrades: `styles.css?v=8`, the module
+The shell is versioned twice for safe upgrades: `styles.css?v=9`, the module
 import map and `sw.js` cache version. When changing shell assets, bump all three
-(`v=8` in `index.html`, the import map and `CACHE_VERSION` in `sw.js`). The
+(`v=9` in `index.html`, the import map and `CACHE_VERSION` in `sw.js`). The
 service worker is network-first for HTML/CSS/JS and precaches with `cache:
 'reload'`, so a deployment cannot mix new HTML with an old stylesheet.
 

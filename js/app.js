@@ -37,7 +37,7 @@ import { detectFace } from '#app/face-detect';
 import { createBackgroundMask } from '#app/background';
 import { buildPdfDocument, pdfBytes } from '#app/pdf';
 import { buildPrintDocument, printHtmlDocument } from '#app/print';
-import { createBilling } from './billing.js?v=8';
+import { createBilling } from './billing.js?v=9';
 
 const PREVIEW_MAX_SIDE = 540;
 const PREVIEW_EDITOR_SIDE = 1200;

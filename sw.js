@@ -1,24 +1,24 @@
 /* Passport Photo Maker service worker — versioned shell, offline fallback, vendor cache. */
-const CACHE_VERSION = 'ppm-v8';
+const CACHE_VERSION = 'ppm-v9';
 const CACHE = `passport-photo-maker-${CACHE_VERSION}`;
-const ASSET_VERSION = '8';
+const ASSET_VERSION = '9';
 
 const CORE_ASSETS = [
   './',
   './index.html',
   // Versioned shell assets: the page loads these exact URLs, so a deploy can
   // never mix new HTML with an old cached stylesheet or module.
-  './styles.css?v=8',
-  './js/app.js?v=8',
-  './js/geometry.js?v=8',
-  './js/crop.js?v=8',
-  './js/image-processing.js?v=8',
-  './js/face-detect.js?v=8',
-  './js/background.js?v=8',
-  './js/pdf.js?v=8',
-  './js/print.js?v=8',
-  './js/pwa.js?v=8',
-  './js/billing.js?v=8',
+  './styles.css?v=9',
+  './js/app.js?v=9',
+  './js/geometry.js?v=9',
+  './js/crop.js?v=9',
+  './js/image-processing.js?v=9',
+  './js/face-detect.js?v=9',
+  './js/background.js?v=9',
+  './js/pdf.js?v=9',
+  './js/print.js?v=9',
+  './js/pwa.js?v=9',
+  './js/billing.js?v=9',
   // Keep the unversioned copies too so an older open tab cannot break when the
   // previous cache is removed during activation.
   './styles.css',
