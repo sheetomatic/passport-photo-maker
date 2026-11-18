@@ -286,14 +286,18 @@ export function createBilling({ toast = () => {} } = {}) {
           els.stripText.textContent = "Loading your account…";
         } else if (state.access.isPro) {
           els.stripText.textContent = "Unlimited exports · subscription active";
-        } else if ((state.access.freeExportsRemaining ?? 0) > 0) {
-          els.stripText.textContent = "1 free export remaining";
+        } else if (state.access.isTrial) {
+          els.stripText.textContent = `Free trial · ${state.access.trialDaysLeft} days left`;
         } else {
-          els.stripText.textContent = "Free export used · subscribe to keep exporting";
+          els.stripText.textContent = "Trial ended · subscribe to keep exporting";
         }
       }
       if (els.openBilling) {
-        els.openBilling.textContent = state.access?.isPro ? "Manage" : "₹100/month";
+        els.openBilling.textContent = state.access?.isPro
+          ? "Manage"
+          : state.access?.isTrial
+            ? "Free trial"
+            : "₹100/month";
       }
     }
 
@@ -309,6 +313,7 @@ export function createBilling({ toast = () => {} } = {}) {
           : state.account?.email || "Signed in";
 
       const isPro = Boolean(state.access?.isPro);
+      const isTrial = Boolean(state.access?.isTrial);
       const cancelAtPeriodEnd = Boolean(state.access?.subscription?.cancelAtPeriodEnd);
       if (isPro) {
         const end = state.access?.subscription?.currentEnd
@@ -321,14 +326,15 @@ export function createBilling({ toast = () => {} } = {}) {
             : "Subscription active · unlimited exports";
       } else if (!state.access) {
         els.status.textContent = "Loading your account…";
-      } else if ((state.access.freeExportsRemaining ?? 0) > 0) {
-        els.status.textContent = "Your one free export is available.";
+      } else if (isTrial) {
+        const end = state.access.trialEndsAt ? new Date(state.access.trialEndsAt) : null;
+        els.status.textContent = `Free trial until ${formatDate(end)} · ${state.access.trialDaysLeft} days left`;
       } else {
-        els.status.textContent = "Your free export has been used.";
+        els.status.textContent = "Your 3-month free trial has ended.";
       }
 
       if (els.subscribe) {
-        els.subscribe.hidden = isPro;
+        els.subscribe.hidden = isPro || isTrial;
         els.subscribe.textContent = `Subscribe for ${planLabel()}/month`;
       }
       if (els.cancel) {
@@ -340,17 +346,17 @@ export function createBilling({ toast = () => {} } = {}) {
 
     if (els.title && els.sub) {
       if (!state.token) {
-        els.title.textContent = "Sign in to export";
-        els.sub.textContent = "Create an account for one free export, then ₹100/month.";
+        els.title.textContent = "Start your 3 months free";
+        els.sub.textContent = "Create an account. No card required for the trial.";
       } else if (state.access?.isPro) {
         els.title.textContent = "Your account";
         els.sub.textContent = "Subscription, payment and invoices.";
-      } else if ((state.access?.freeExportsRemaining ?? 0) > 0) {
-        els.title.textContent = "Use your free export";
-        els.sub.textContent = "One export is included, then ₹100/month.";
+      } else if (state.access?.isTrial) {
+        els.title.textContent = "Your free trial";
+        els.sub.textContent = `${state.access.trialDaysLeft} days left · unlimited exports. Then ₹100/month.`;
       } else {
         els.title.textContent = "Keep exporting";
-        els.sub.textContent = "Your free export has been used. Subscribe for unlimited exports.";
+        els.sub.textContent = "Your 3-month free trial has ended. Subscribe for unlimited exports.";
       }
     }
   }
@@ -455,7 +461,7 @@ export function createBilling({ toast = () => {} } = {}) {
         body: { name, email, password, acceptTerms },
         auth: false,
       });
-      finishAuth(data, "Account created. You can use your free export.");
+      finishAuth(data, "Account created. Your 3 months free start now.");
     } catch (error) {
       if (error.status === 409) {
         setAuthMode("login");
@@ -657,13 +663,13 @@ export function createBilling({ toast = () => {} } = {}) {
     if (!state.enabled) return true;
     if (!state.token) {
       openDialog();
-      toast("Sign in or create an account to use your free export.", "success", 5000);
+      toast("Sign in or create an account to start your 3 months free.", "success", 5000);
       return false;
     }
     if (!state.access) await restoreSession();
     if (!state.access?.canExport) {
       openDialog();
-      toast("Your free export has been used. Subscribe for unlimited exports.", "error", 6000);
+      toast("Your 3-month free trial has ended. Subscribe for ₹100/month.", "error", 6000);
       return false;
     }
     if (state.busy) return false;
@@ -672,8 +678,8 @@ export function createBilling({ toast = () => {} } = {}) {
       const data = await api("/exports/claim", { method: "POST" });
       state.access = data.access ?? state.access;
       render();
-      if (data.kind === "free") {
-        toast("Free export used. Subscribe for unlimited exports.", "success", 5000);
+      if (data.kind === "trial") {
+        toast(`Free trial export · ${state.access.trialDaysLeft} days left.`, "success", 4000);
       }
       return true;
     } catch (error) {
@@ -681,7 +687,7 @@ export function createBilling({ toast = () => {} } = {}) {
         state.access = error.data?.access ?? state.access;
         render();
         openDialog();
-        toast("Your free export has been used. Subscribe for ₹100/month.", "error", 6000);
+        toast("Your 3-month free trial has ended. Subscribe for ₹100/month.", "error", 6000);
       } else {
         toast(error.message || "The export could not be authorised.", "error", 6000);
       }

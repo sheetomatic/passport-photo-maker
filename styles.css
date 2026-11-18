@@ -3650,3 +3650,9 @@ body.sidebar-open .sidebar-toggle {
     max-height: 92dvh;
   }
 }
+
+.account-pill.is-trial {
+  border-color: rgba(37, 99, 235, 0.22);
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+}

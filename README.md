@@ -97,16 +97,16 @@ For local LAN testing, `npm run dev:lan` prints the phone URL (same Wi-Fi; allow
 - **Mobile printing**: Print / Share PDF sends the A4 PDF to the share sheet (AirPrint) on supported phones; without Web Share, the same button opens the browser print dialog with a dedicated exact-size print sheet. Save PDF stays available.
 - **Mobile-friendly drawer**: on a phone the preview fills the screen and a floating **Adjust photo / Print settings** button opens the settings panel; all controls remain reachable with large touch targets and safe-area padding.
 - **Installable PWA**: web app manifest with any/maskable icons, standalone display, a service worker for the offline app shell, and an in-app install flow with iPhone/Android instructions.
-- **Accounts**: email/password registration and sign-in, with bcrypt-hashed passwords. The first print-ready export is free per account. There is no password-reset email flow yet; support handles resets.
-- **Subscription and invoices**: ₹100/month via Razorpay Subscriptions, with payment history, downloadable invoice/receipt PDFs, and cancellation at the end of the current period.
+- **Accounts**: email/password registration and sign-in, with bcrypt-hashed passwords. Every account gets a **3-month free trial** with unlimited exports; no card is required for the trial. There is no password-reset email flow yet; support handles resets.
+- **Subscription and invoices**: after the trial, ₹100/month via Razorpay Subscriptions, with payment history, downloadable invoice/receipt PDFs, and cancellation at the end of the current period.
 - **Privacy**: photos are decoded and processed in memory with Canvas and are never uploaded. Account and billing requests go to the Sheetomatic API; Razorpay receives only the checkout details. The face-detection model and WASM are vendored locally.
 
 ## Accounts and billing
 
 - Registration requires name, email, password (8+ characters with a letter and number), and acceptance of the Terms/Privacy Policy.
 - Account sessions are bearer tokens; passwords are bcrypt-hashed and login is rate-limited.
-- The first PDF/print export is free per account. Subsequent exports require an active subscription.
-- The subscription is **₹100/month** through Razorpay. Payment receipts are stored as invoices and can be downloaded as PDF from the account panel.
+- Every account starts with a **3-month free trial** and can export without limits during it; no card is required.
+- After the trial, the subscription is **₹100/month** through Razorpay. Payment receipts are stored as invoices and can be downloaded as PDF from the account panel.
 - Cancellation is self-serve and takes effect at the end of the current billing period.
 - The app uses the Sheetomatic Workspace API for accounts, subscriptions and invoices; photo processing remains local.
 - Invoices are payment receipts. GST/tax invoicing requires the seller GST configuration; the current receipt says tax treatment is as applicable.
@@ -304,9 +304,9 @@ Redeploy after changes:
 git add . && git commit -m "Update app" && git push
 ```
 
-The shell is versioned twice for safe upgrades: `styles.css?v=7`, the module
+The shell is versioned twice for safe upgrades: `styles.css?v=8`, the module
 import map and `sw.js` cache version. When changing shell assets, bump all three
-(`v=7` in `index.html`, the import map and `CACHE_VERSION` in `sw.js`). The
+(`v=8` in `index.html`, the import map and `CACHE_VERSION` in `sw.js`). The
 service worker is network-first for HTML/CSS/JS and precaches with `cache:
 'reload'`, so a deployment cannot mix new HTML with an old stylesheet.
 
@@ -335,6 +335,7 @@ or reload the page once; the versioned asset URLs bypass the old cache.
 - Face detection is a suggestion, not a guarantee; use the manual crop whenever framing matters.
 - Account, subscription and invoice features require the Sheetomatic API and an internet connection. Photos themselves stay on-device.
 - The ₹100 price is the Razorpay plan amount; GST/tax treatment must be configured separately if applicable.
+- The trial does not auto-convert to a paid plan. A user must subscribe after the trial ends; there is no card on file and no automatic charge.
 - There is no self-serve password reset or email verification yet. Registration accepts an email address without proving ownership; support handles account recovery.
 
 ## Privacy
