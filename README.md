@@ -2,7 +2,7 @@
 
 A complete, browser-only passport photo tool built from the supplied DeepSeek prompt pack.
 
-Upload one portrait — or take one with your phone camera — → conservative enhancement → exact 7:9 crop → true A4 preview → **six identical 35 × 45 mm photos in one horizontal row** → print-ready PDF or direct print.
+Upload one portrait — or take one with your phone camera — → on-device enhancement and background cleanup → exact 7:9 crop → true A4 preview → **six identical 35 × 45 mm photos in one horizontal row** → print-ready PDF or direct print.
 
 Everything runs on the device. There is no backend, no account, no analytics, and no photo upload.
 
@@ -70,6 +70,8 @@ For local LAN testing, `npm run dev:lan` prints the phone URL (same Wi-Fi; allow
 
 ![Mobile print](screenshots/app-mobile-print.png)
 
+![Background replacement controls](screenshots/app-background.png)
+
 ## What it does
 
 - **One photo in, six identical photos out.** Every copy uses the same rendered crop and enhancement.
@@ -80,7 +82,8 @@ For local LAN testing, `npm run dev:lan` prints the phone URL (same Wi-Fi; allow
 - **A4 preview at true proportions** with millimetre measurements, cut guides, and a live metric panel.
 - **Top-aligned row by default** (starts at the paper edge in Exact mode, at the safe margin in Printer-safe). The `Centred` option restores the 126 mm middle position, and a nudge control moves the row down.
 - **Optional cut marks / hairlines / printed labels**; measurement overlays are preview-only.
-- **Basic Photo Enhancement** using Canvas: conservative grey-world white balance, exposure correction, percentile contrast, luminance-only unsharp mask. Original is always preserved; Original/Enhanced comparison and reset.
+- **Photo Enhancement** using Canvas: auto exposure and grey-world white balance, percentile contrast, warmth, vibrance, multi-scale clarity/sharpening, and a low-strength edge-aware skin-smoothing pass. Original is always preserved; Original/Enhanced comparison, adjustable auto strength, and reset.
+- **Background removal / replacement**: a local MediaPipe selfie segmenter cuts the subject out of the photo and composites it over white, pale blue, light grey, or a custom colour. Edge softness is adjustable, and the original background can be restored instantly. Automatic cutouts are approximate — the UI says to check hair and ears.
 - **Manual 7:9 crop** with drag, wheel/slider zoom, keyboard nudging and reset.
 - **Take Photo on mobile** through the native camera, plus Choose Photo, drag/drop, replace and retake. HEIC/HEIF is accepted where the browser can decode it (Safari); other browsers get a clear explanation instead of a silent failure.
 - **Optional face suggestion** using vendored MediaPipe Tasks Vision + BlazeFace. It fails gracefully to a centred crop; photo editing never depends on it.
@@ -146,12 +149,13 @@ The source crop and target canvas are both 7:9, so images are never stretched.
 ## Workflow
 
 1. **Upload** — take a photo with the phone camera, choose from the library, or drag/drop; JPG, PNG, WEBP (and HEIC where supported) up to 40 MB. Type and decode failures show a clear error without breaking the current session.
-2. **Enhance** — Original/Enhanced toggle, brightness, contrast, sharpness. The original is untouched.
-3. **Crop** — locked 7:9 frame; drag to pan, scroll/slider/± to zoom, arrow keys to nudge, Reset Crop. A face is suggested automatically when the local detector loads. On touch devices the hint says to zoom with the slider or ±
-4. **Layout** — Exact or Printer-safe, safe margin, gap, row position (Top default / Centred), nudge, cut guides, print quality (300/600 dpi), printed labels, measurements.
-5. **Preview** — live A4 sheet with six copies and measurement overlay; Generate Preview renders the full-resolution print image and verifies every geometry check.
-6. **Export** — Download PDF (one page) or Print. On mobile, Print / Share PDF uses the share sheet when available and falls back to the system print dialog; desktop uses the browser's print dialog with the A4 sheet.
-7. **Replace / Retake / Remove** — replacing re-renders all six; removing returns to the empty state.
+2. **Enhance** — Original/Enhanced toggle, auto strength, brightness, contrast, warmth, sharpness and skin smoothing. The original is untouched.
+3. **Background** — switch removal on, pick White/Blue/Grey/Custom, adjust edge softness, or return to Original. The cutout runs locally with the bundled selfie segmenter.
+4. **Crop** — locked 7:9 frame; drag to pan, scroll/slider/± to zoom, arrow keys to nudge, Reset Crop. A face is suggested automatically when the local detector loads.
+5. **Layout** — Exact or Printer-safe, safe margin, gap, row position (Top default / Centred), nudge, cut guides, print quality (300/600 dpi), printed labels, measurements.
+6. **Preview** — live A4 sheet with six copies and measurement overlay; Generate Preview renders the full-resolution print image and verifies every geometry check.
+7. **Export** — Download PDF (one page) or Print. On mobile, Print / Share PDF uses the share sheet when available and falls back to the system print dialog; desktop uses the browser's print dialog with the A4 sheet.
+8. **Replace / Retake / Remove** — replacing re-renders all six; removing returns to the empty state.
 
 ## Print instructions
 
@@ -178,7 +182,8 @@ passport-photo-maker/
 ├─ styles.css                  # visual system, responsive layout, A4 sheet
 ├─ js/
 │  ├─ geometry.js              # A4 maths, modes, guides, verification (source of truth)
-│  ├─ image-processing.js      # decode, tone analysis, LUT enhancement, crop rendering
+│  ├─ image-processing.js      # decode, tone analysis, skin smoothing, background compositing, crop rendering
+│  ├─ background.js            # lazy local selfie segmentation for cutouts
 │  ├─ crop.js                  # 7:9 crop model, clamping, face framing
 │  ├─ face-detect.js           # lazy local MediaPipe loader
 │  ├─ app.js                   # state, UI wiring, preview, export
@@ -186,7 +191,7 @@ passport-photo-maker/
 │  └─ print.js                 # exact print document + iframe printing
 ├─ vendor/
 │  ├─ jspdf.umd.min.js         # pinned jsPDF 2.5.2
-│  └─ mediapipe/               # pinned MediaPipe Tasks Vision 0.10.14 + BlazeFace model
+│  └─ mediapipe/               # Tasks Vision 0.10.14, BlazeFace, selfie segmenter model
 ├─ icons/                      # 192/512/maskable/apple-touch/favicon PNGs
 ├─ manifest.json               # PWA manifest (standalone, relative scope)
 ├─ sw.js                       # offline app-shell cache + runtime vendor cache
@@ -213,6 +218,7 @@ Run `npm test`:
 - Safe mode never claims 35 mm; labels are opt-in.
 - Camera-style uploads without an extension, HEIC acceptance, format rejection, empty/oversized files.
 - PWA manifest fields, icon dimensions/purposes, screenshots, service-worker precache and navigation fallback, and the install/theme metadata.
+- Enhancement reset returns to the new defaults (auto strength, contrast, sharpness, smoothing, warmth).
 
 Run `npm run test:e2e` (real Chrome, headless):
 
@@ -229,6 +235,7 @@ Run `npm run test:e2e` (real Chrome, headless):
 - Replace photo updates all six copies; remove returns to the empty state.
 - **Mobile emulation** (iPhone UA, touch, 390 × 844): Take Photo/Choose Photo visible, `capture="user"` camera input path loads the photo, Retake visible, no horizontal overflow.
 - **Mobile share path**: stubbed Web Share receives a real `application/pdf` File of the print sheet.
+- **Background removal**: white and pale-blue cutouts measured at the sheet corners, Original restored on toggle, and the full-resolution export canvas checked for a white background.
 - **Mobile print fallback**: with sharing disabled, the direct print portal opens with six 35 × 45 mm photos, measured in print media, and produces exactly one A4 page.
 - **Live GitHub Pages deploy**: installability errors empty, service worker controlling the page, six photos and face detection working on the deployed HTTPS origin, and an offline reload rendering the app shell.
 - Face detection blocked at the network layer → warning status, six-photo manual flow still works.
@@ -266,6 +273,7 @@ when changing shell assets so returning visitors receive the new build.
 ## Limitations
 
 - This is a print-sheet tool, **not an official compliance guarantee**. Passport rules vary by country; check requirements (head size, background, expression, recency) before submitting.
+- Automatic background cutouts are approximate around fine hair and thin straps. Inspect the preview at full size, or keep the original background, when edges matter.
 - The layout is intentionally fixed to six identical photos in one row on A4 portrait.
 - Exact mode depends on borderless printer hardware.
 - Very large images are downscaled to 3200 px on the long edge before processing, which is far above the 826 px print requirement.
@@ -275,7 +283,7 @@ when changing shell assets so returning visitors receive the new build.
 
 ## Privacy
 
-All decoding, enhancement, face detection, PDF generation and printing happen in the browser. The app makes no external requests. Photos are held in memory only and are never uploaded or persisted; no object URLs are left dangling.
+All decoding, enhancement, background segmentation, face detection, PDF generation and printing happen in the browser. The app makes no external requests. Photos are held in memory only and are never uploaded or persisted; no object URLs are left dangling.
 
 ## Third-party notices
 

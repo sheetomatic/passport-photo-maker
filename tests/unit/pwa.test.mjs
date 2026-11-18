@@ -73,6 +73,8 @@ test('service worker precaches the shell and supports offline navigation', () =>
   assert.match(sw, /\.\/index\.html/);
   assert.match(sw, /vendor\/jspdf\.umd\.min\.js/);
   assert.match(sw, /vendor\/mediapipe\//);
+  assert.match(sw, /selfie_segmenter\.tflite/);
+  assert.match(sw, /js\/background\.js/);
   assert.match(sw, /request\.mode === 'navigate'/);
   assert.ok(fs.existsSync(path.join(ROOT, '.nojekyll')));
 });

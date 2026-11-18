@@ -33,11 +33,12 @@ import {
   suggestCropFromFace,
 } from './crop.js';
 import { detectFace } from './face-detect.js';
+import { createBackgroundMask } from './background.js';
 import { buildPdfDocument, pdfBytes } from './pdf.js';
 import { buildPrintDocument, printHtmlDocument } from './print.js';
 
 const PREVIEW_WIDTH = 420; // 7:9 -> 420 x 540
-const PREVIEW_EDITOR_SIDE = 1500;
+const PREVIEW_EDITOR_SIDE = 1200;
 
 const $ = (id) => document.getElementById(id);
 
@@ -66,14 +67,30 @@ const els = {
   thumbOriginal: $('thumbOriginal'),
   thumbEnhanced: $('thumbEnhanced'),
   enhanceStatus: $('enhanceStatus'),
+  strength: $('strength'),
+  strengthValue: $('strengthValue'),
   brightness: $('brightness'),
   brightnessValue: $('brightnessValue'),
   contrast: $('contrast'),
   contrastValue: $('contrastValue'),
+  warmth: $('warmth'),
+  warmthValue: $('warmthValue'),
   sharpness: $('sharpness'),
   sharpnessValue: $('sharpnessValue'),
+  smoothing: $('smoothing'),
+  smoothingValue: $('smoothingValue'),
   btnResetEnhance: $('btnResetEnhance'),
   btnUseEnhanced: $('btnUseEnhanced'),
+  bgToggle: $('bgToggle'),
+  bgOptions: $('bgOptions'),
+  bgCustom: $('bgCustom'),
+  bgCustomSwatch: $('bgCustomSwatch'),
+  bgCustomOption: $('bgCustomOption'),
+  bgFeather: $('bgFeather'),
+  bgFeatherValue: $('bgFeatherValue'),
+  bgStatus: $('bgStatus'),
+  bgStatusText: $('bgStatusText'),
+  bgWarning: $('bgWarning'),
 
   cropFrame: $('cropFrame'),
   cropImage: $('cropImage'),
@@ -142,6 +159,8 @@ const state = {
   loadSeq: 0,
   crop: null,
   enhance: { enabled: true, ...DEFAULT_ENHANCE_SETTINGS },
+  background: { enabled: false, color: '#ffffff', feather: 20 },
+  backgroundTimer: 0,
   layout: {
     mode: MODES.EXACT,
     safeMarginMm: LIMITS.safeMarginMm.default,
@@ -176,6 +195,7 @@ let cropDrag = null;
 function init() {
   syncEnhanceInputs();
   syncLayoutInputs();
+  syncBackgroundUI();
   bindEvents();
   updateStepper();
   updateActionState();
@@ -217,10 +237,45 @@ function bindEvents() {
   els.optEnhanced.addEventListener('click', () => setEnhancementMode('enhanced'));
   els.btnUseEnhanced.addEventListener('click', () => setEnhancementMode('enhanced'));
 
-  for (const input of [els.brightness, els.contrast, els.sharpness]) {
+  for (const input of [
+    els.strength,
+    els.brightness,
+    els.contrast,
+    els.warmth,
+    els.sharpness,
+    els.smoothing,
+  ]) {
     input.addEventListener('input', onEnhanceInput);
   }
   els.btnResetEnhance.addEventListener('click', resetEnhancement);
+
+  els.bgToggle.addEventListener('click', () => {
+    setBackgroundEnabled(!state.background.enabled);
+  });
+  els.bgOptions.querySelectorAll('[data-bg]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const value = button.dataset.bg;
+      if (value === 'original') {
+        setBackgroundEnabled(false);
+      } else {
+        setBackgroundEnabled(true, value);
+      }
+    });
+  });
+  els.bgCustom.addEventListener('input', () => {
+    state.background.color = els.bgCustom.value;
+    if (!state.background.enabled) {
+      setBackgroundEnabled(true, state.background.color);
+    } else {
+      syncBackgroundUI();
+      scheduleBackgroundRefresh();
+    }
+  });
+  els.bgFeather.addEventListener('input', () => {
+    state.background.feather = Number(els.bgFeather.value);
+    els.bgFeatherValue.textContent = String(state.background.feather);
+    if (state.background.enabled) scheduleBackgroundRefresh();
+  });
 
   els.cropFrame.addEventListener('pointerdown', onCropPointerDown);
   els.cropFrame.addEventListener('pointermove', onCropPointerMove);
@@ -370,6 +425,9 @@ function startSession(photo) {
   state.crop = createCropState(photo.width, photo.height, { zoom: 1 });
   state.cropTouched = false;
   state.enhance = { enabled: true, ...DEFAULT_ENHANCE_SETTINGS };
+  state.background = { enabled: false, color: '#ffffff', feather: 20 };
+  photo.segmentMask = null;
+  photo.segmentPromise = null;
   state.exportAssets = null;
   state.printAssets = null;
   state.previewDataUrl = null;
@@ -388,16 +446,10 @@ function startSession(photo) {
   updatePhotoCard();
   syncEnhanceInputs();
   syncLayoutInputs();
+  syncBackgroundUI();
+  setBgStatus('idle', 'Original background.');
   setEnhancementMode('enhanced', { rebuild: false });
-
-  const editorCanvas = renderEditorImage(photo.source, {
-    maxSide: PREVIEW_EDITOR_SIDE,
-    enhance: false,
-  });
-  state.editorOriginalUrl = canvasToDataUrl(editorCanvas, 0.92);
-  els.thumbOriginal.src = state.editorOriginalUrl;
-  els.cropImage.src = state.editorOriginalUrl;
-  els.photoThumb.src = state.editorOriginalUrl;
+  buildEditorOriginal();
 
   syncCropImage();
   updateSheetPreview();
@@ -465,6 +517,8 @@ function removePhoto() {
   state.enhancedSettingsKey = null;
   state.step = 1;
   state.enhance = { enabled: true, ...DEFAULT_ENHANCE_SETTINGS };
+  state.background = { enabled: false, color: '#ffffff', feather: 20 };
+  window.clearTimeout(state.backgroundTimer);
   state.layout = {
     mode: MODES.EXACT,
     safeMarginMm: LIMITS.safeMarginMm.default,
@@ -491,10 +545,12 @@ function removePhoto() {
   clearError();
   syncEnhanceInputs();
   syncLayoutInputs();
+  syncBackgroundUI();
   updateStepper();
   updateLayoutUI();
   updateActionState();
   setFaceStatus('idle', 'Face detection runs after upload.');
+  setBgStatus('idle', 'Original background.');
   toast('Photo removed. Nothing was uploaded.');
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -505,24 +561,33 @@ function removePhoto() {
 
 function getEnhanceSettings() {
   return {
+    strength: Number(els.strength.value),
     brightness: Number(els.brightness.value),
     contrast: Number(els.contrast.value),
+    warmth: Number(els.warmth.value),
     sharpness: Number(els.sharpness.value),
+    smoothing: Number(els.smoothing.value),
   };
 }
 
 function enhanceKey() {
   const settings = getEnhanceSettings();
-  return `${settings.brightness}:${settings.contrast}:${settings.sharpness}`;
+  return `${settings.strength}:${settings.brightness}:${settings.contrast}:${settings.warmth}:${settings.sharpness}:${settings.smoothing}`;
 }
 
 function syncEnhanceInputs() {
+  els.strength.value = String(state.enhance.strength);
   els.brightness.value = String(state.enhance.brightness);
   els.contrast.value = String(state.enhance.contrast);
+  els.warmth.value = String(state.enhance.warmth);
   els.sharpness.value = String(state.enhance.sharpness);
+  els.smoothing.value = String(state.enhance.smoothing);
+  els.strengthValue.textContent = String(state.enhance.strength);
   els.brightnessValue.textContent = formatSigned(state.enhance.brightness);
   els.contrastValue.textContent = formatSigned(state.enhance.contrast);
+  els.warmthValue.textContent = formatSigned(state.enhance.warmth);
   els.sharpnessValue.textContent = String(state.enhance.sharpness);
+  els.smoothingValue.textContent = String(state.enhance.smoothing);
 }
 
 function formatSigned(value) {
@@ -532,9 +597,12 @@ function formatSigned(value) {
 
 function onEnhanceInput() {
   state.enhance = { ...getEnhanceSettings(), enabled: state.enhance.enabled };
+  els.strengthValue.textContent = String(state.enhance.strength);
   els.brightnessValue.textContent = formatSigned(state.enhance.brightness);
   els.contrastValue.textContent = formatSigned(state.enhance.contrast);
+  els.warmthValue.textContent = formatSigned(state.enhance.warmth);
   els.sharpnessValue.textContent = String(state.enhance.sharpness);
+  els.smoothingValue.textContent = String(state.enhance.smoothing);
   scheduleEditorEnhance(140);
   scheduleSheet(200);
 }
@@ -557,7 +625,7 @@ function setEnhancementMode(mode, { rebuild = true } = {}) {
   els.optEnhanced.setAttribute('aria-pressed', String(enhanced));
   els.btnUseEnhanced.disabled = enhanced;
   els.enhanceStatus.textContent = enhanced
-    ? 'Enhanced tone is applied. Compare with the original any time.'
+    ? 'Auto tone, colour, skin smoothing and detail are applied on-device. Compare with the original any time.'
     : 'Showing the original photo. Enhanced is recommended for print.';
 
   if (!state.photo) return;
@@ -578,9 +646,170 @@ function scheduleEditorEnhance(delay = 140) {
   state.editorTimer = window.setTimeout(buildEditorEnhancement, delay);
 }
 
+function getBackgroundSettings() {
+  const enabled = Boolean(state.photo?.segmentMask && state.background.enabled);
+  return {
+    enabled,
+    color: state.background.color,
+    feather: state.background.feather,
+  };
+}
+
+function backgroundKey() {
+  return [
+    state.background.enabled ? 1 : 0,
+    state.background.color,
+    state.background.feather,
+    state.photo?.segmentMask ? 1 : 0,
+  ].join(':');
+}
+
+function backgroundStatusLabel() {
+  const names = {
+    '#ffffff': 'White',
+    '#dbe9f7': 'Pale blue',
+    '#e7e5df': 'Light grey',
+  };
+  const name = names[String(state.background.color).toLowerCase()] || state.background.color.toUpperCase();
+  return `Background removed · ${name}.`;
+}
+
+function setBgStatus(kind, text) {
+  if (!els.bgStatus) return;
+  els.bgStatus.dataset.state = kind;
+  els.bgStatusText.textContent = text;
+}
+
+function syncBackgroundUI() {
+  const enabled = state.background.enabled;
+  els.bgToggle.setAttribute('aria-checked', String(enabled));
+  els.bgToggle.classList.toggle('is-on', enabled);
+  els.bgWarning.hidden = !enabled;
+  els.bgFeather.disabled = !enabled;
+  els.bgFeather.value = String(state.background.feather);
+  els.bgFeatherValue.textContent = String(state.background.feather);
+  els.bgCustom.value = state.background.color;
+  els.bgCustomSwatch.style.setProperty('--bg-color', state.background.color);
+
+  let presetSelected = false;
+  for (const button of els.bgOptions.querySelectorAll('[data-bg]')) {
+    const value = button.dataset.bg;
+    const selected =
+      value === 'original'
+        ? !enabled
+        : enabled && state.background.color.toLowerCase() === value.toLowerCase();
+    button.classList.toggle('is-selected', selected);
+    button.setAttribute('aria-pressed', String(selected));
+    if (selected && value !== 'original') presetSelected = true;
+  }
+  els.bgCustomOption.classList.toggle('is-selected', enabled && !presetSelected);
+}
+
+function buildEditorOriginal() {
+  if (!state.photo) return;
+  const background = getBackgroundSettings();
+  const canvas = renderEditorImage(state.photo.source, {
+    maxSide: PREVIEW_EDITOR_SIDE,
+    enhance: false,
+    background,
+    maskCanvas: background.enabled ? state.photo.segmentMask : null,
+  });
+  state.editorOriginalUrl = canvasToDataUrl(canvas, 0.92);
+  els.thumbOriginal.src = state.editorOriginalUrl;
+  const url =
+    state.enhance.enabled && state.editorEnhancedUrl
+      ? state.editorEnhancedUrl
+      : state.editorOriginalUrl;
+  els.cropImage.src = url;
+  els.photoThumb.src = url;
+  syncCropImage();
+}
+
+function refreshBackgroundViews() {
+  if (!state.photo) return;
+  state.enhancedSettingsKey = null;
+  state.editorEnhancedUrl = null;
+  state.exportAssets = null;
+  state.printAssets = null;
+  buildEditorOriginal();
+  buildEditorEnhancement();
+  scheduleSheet(0);
+  updatePrintStatus();
+}
+
+function scheduleBackgroundRefresh() {
+  window.clearTimeout(state.backgroundTimer);
+  state.backgroundTimer = window.setTimeout(refreshBackgroundViews, 160);
+}
+
+function setBackgroundEnabled(enabled, color) {
+  if (!state.photo) return;
+  state.background = {
+    ...state.background,
+    enabled,
+    ...(color ? { color } : {}),
+  };
+  syncBackgroundUI();
+
+  if (!enabled) {
+    setBgStatus('idle', 'Original background.');
+    refreshBackgroundViews();
+    return;
+  }
+
+  if (state.photo.segmentMask) {
+    setBgStatus('ok', backgroundStatusLabel());
+    refreshBackgroundViews();
+    return;
+  }
+
+  setBgStatus('loading', 'Removing background…');
+  refreshBackgroundViews();
+  ensureBackgroundMask();
+}
+
+async function ensureBackgroundMask() {
+  const photo = state.photo;
+  if (!photo) return null;
+  if (photo.segmentMask) return photo.segmentMask;
+  if (photo.segmentPromise) return photo.segmentPromise;
+
+  const photoId = photo.id;
+  photo.segmentPromise = createBackgroundMask(photo.source)
+    .then((mask) => {
+      if (!state.photo || state.photo.id !== photoId) return null;
+      photo.segmentMask = mask;
+      if (state.background.enabled) {
+        setBgStatus('ok', backgroundStatusLabel());
+        refreshBackgroundViews();
+      }
+      return mask;
+    })
+    .catch((error) => {
+      console.warn('Background removal failed', error);
+      if (!state.photo || state.photo.id !== photoId) return null;
+      state.background.enabled = false;
+      syncBackgroundUI();
+      setBgStatus('warn', 'Background removal unavailable — using the original.');
+      refreshBackgroundViews();
+      toast(
+        'Background removal could not run on this photo. The original background is kept.',
+        'error',
+        6500,
+      );
+      return null;
+    })
+    .finally(() => {
+      if (state.photo === photo) photo.segmentPromise = null;
+    });
+
+  return photo.segmentPromise;
+}
+
 function buildEditorEnhancement() {
   if (!state.photo) return;
-  const key = `${state.photo.id}|${enhanceKey()}|${PREVIEW_EDITOR_SIDE}`;
+  const background = getBackgroundSettings();
+  const key = `${state.photo.id}|${enhanceKey()}|${backgroundKey()}|${PREVIEW_EDITOR_SIDE}`;
   if (state.enhancedSettingsKey === key && state.editorEnhancedUrl) {
     if (state.enhance.enabled) els.cropImage.src = state.editorEnhancedUrl;
     return;
@@ -591,6 +820,8 @@ function buildEditorEnhancement() {
     enhance: true,
     analysis: state.photo.analysis,
     settings: getEnhanceSettings(),
+    background,
+    maskCanvas: background.enabled ? state.photo.segmentMask : null,
   });
   state.editorEnhancedUrl = canvasToDataUrl(canvas, 0.92);
   state.enhancedSettingsKey = key;
@@ -915,10 +1146,13 @@ function scheduleSheet(delay = 180) {
 function updateSheetPreview() {
   if (!state.photo || !state.crop) return;
   const crop = getCropRect(state.crop);
+  const background = getBackgroundSettings();
   const canvas = renderCrop(state.photo.source, crop, PREVIEW_WIDTH, {
     enhance: state.enhance.enabled,
     analysis: state.photo.analysis,
     settings: getEnhanceSettings(),
+    background,
+    maskCanvas: background.enabled ? state.photo.segmentMask : null,
   });
   state.previewDataUrl = canvasToDataUrl(canvas, 0.92);
   const layout = computeLayout(state.layout);
@@ -1207,6 +1441,7 @@ function exportKey() {
     crop.width.toFixed(3),
     enhanceKey(),
     state.enhance.enabled ? 'enhanced' : 'original',
+    state.background.enabled ? backgroundKey() : 'background-off',
   ].join('|');
 }
 
@@ -1223,6 +1458,17 @@ async function ensureExportAssets({ force = false } = {}) {
   if (!state.photo || !state.crop) {
     throw new Error('Upload a photo first.');
   }
+
+  const wantedBackground = state.background.enabled;
+  if (wantedBackground && !state.photo.segmentMask) {
+    const mask = await ensureBackgroundMask();
+    if (!mask) {
+      throw new Error(
+        'Background removal could not prepare a cutout. Choose Original background and try again.',
+      );
+    }
+  }
+
   const key = exportKey();
   if (!force && state.exportAssets?.key === key) return state.exportAssets;
 
@@ -1232,10 +1478,13 @@ async function ensureExportAssets({ force = false } = {}) {
   const layout = computeLayout(state.layout);
   const px = currentPixelSize(layout);
   const crop = getCropRect(state.crop);
+  const background = getBackgroundSettings();
   const canvas = renderCrop(state.photo.source, crop, px.width, {
     enhance: state.enhance.enabled,
     analysis: state.photo.analysis,
     settings: getEnhanceSettings(),
+    background,
+    maskCanvas: background.enabled ? state.photo.segmentMask : null,
   });
   const dataUrl = canvasToDataUrl(canvas, 0.96);
 

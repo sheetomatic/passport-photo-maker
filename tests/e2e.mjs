@@ -121,6 +121,24 @@ async function makeFixtures(browser) {
   return { portraitPath, replacementPath, corrupt, unsupported, heic };
 }
 
+async function getPhotoCorner(page) {
+  return page.evaluate(async () => {
+    const image = document.querySelector('#sheetPhotos img');
+    if (!image) throw new Error('No sheet photo');
+    if (typeof image.decode === 'function') await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext('2d');
+    context.drawImage(image, 0, 0);
+    const topLeft = Array.from(context.getImageData(3, 3, 1, 1).data);
+    const topRight = Array.from(
+      context.getImageData(canvas.width - 4, 3, 1, 1).data,
+    );
+    return { topLeft, topRight };
+  });
+}
+
 async function getSheetGeometry(page) {
   return page.evaluate(() => {
     const sheet = document.getElementById('sheet').getBoundingClientRect();
@@ -453,6 +471,10 @@ async function main() {
     assert.equal(await page.evaluate(() => window.__passportApp.state.enhance.enabled), false);
     const originalSrc = (await getSheetGeometry(page)).images[0].src;
     assert.notEqual(originalSrc, enhancedSrc, 'original render should differ from enhanced');
+    await page.$eval('#btnUseEnhanced', (element) =>
+      element.scrollIntoView({ block: 'center', behavior: 'instant' }),
+    );
+    await sleep(120);
     await page.click('#btnUseEnhanced');
     await sleep(450);
     assert.equal(await page.evaluate(() => window.__passportApp.state.enhance.enabled), true);
@@ -465,22 +487,121 @@ async function main() {
       const sharpness = document.getElementById('sharpness');
       sharpness.value = '65';
       sharpness.dispatchEvent(new Event('input', { bubbles: true }));
+      const strength = document.getElementById('strength');
+      strength.value = '55';
+      strength.dispatchEvent(new Event('input', { bubbles: true }));
+      const warmth = document.getElementById('warmth');
+      warmth.value = '12';
+      warmth.dispatchEvent(new Event('input', { bubbles: true }));
     });
     await sleep(700);
     const adjusted = await page.evaluate(() => {
-      const app = window.__passportApp.state;
-      return { brightness: app.enhance.brightness, sharpness: app.enhance.sharpness };
+      const app = window.__passportApp.state.enhance;
+      return app;
     });
-    assert.deepEqual(adjusted, { brightness: 18, sharpness: 65 });
+    assert.deepEqual(
+      {
+        strength: adjusted.strength,
+        brightness: adjusted.brightness,
+        sharpness: adjusted.sharpness,
+        warmth: adjusted.warmth,
+      },
+      { strength: 55, brightness: 18, sharpness: 65, warmth: 12 },
+    );
     await page.click('#btnResetEnhance');
     await sleep(500);
     assert.deepEqual(
       await page.evaluate(() => {
         const app = window.__passportApp.state;
-        return { brightness: app.enhance.brightness, contrast: app.enhance.contrast, sharpness: app.enhance.sharpness };
+        return {
+          strength: app.enhance.strength,
+          brightness: app.enhance.brightness,
+          contrast: app.enhance.contrast,
+          warmth: app.enhance.warmth,
+          sharpness: app.enhance.sharpness,
+          smoothing: app.enhance.smoothing,
+        };
       }),
-      { brightness: 0, contrast: 0, sharpness: 30 },
+      { strength: 80, brightness: 0, contrast: 5, warmth: 0, sharpness: 50, smoothing: 30 },
     );
+
+    console.log('8. background removal and replacement');
+    assert.equal(
+      await page.$eval('#bgToggle', (element) => element.getAttribute('aria-checked')),
+      'false',
+    );
+    const originalCorner = await getPhotoCorner(page);
+    assert.equal(originalCorner.topLeft[3], 255);
+    assert.ok(
+      !originalCorner.topLeft.slice(0, 3).every((value) => value > 245),
+      `original background should not be white: ${originalCorner.topLeft}`,
+    );
+
+    await page.click('[data-bg="#ffffff"]');
+    await page.waitForFunction(
+      () => document.getElementById('bgStatus').dataset.state === 'ok',
+      { timeout: 30000 },
+    );
+    await sleep(500);
+    const whiteCorner = await getPhotoCorner(page);
+    assert.ok(
+      whiteCorner.topLeft.slice(0, 3).every((value) => value > 248),
+      `white background expected: ${whiteCorner.topLeft}`,
+    );
+    assert.ok(
+      whiteCorner.topRight.slice(0, 3).every((value) => value > 248),
+      `white background expected at top-right: ${whiteCorner.topRight}`,
+    );
+    assert.equal(
+      await page.$eval('#bgToggle', (element) => element.getAttribute('aria-checked')),
+      'true',
+    );
+    assert.equal(
+      await page.$eval('[data-bg="#ffffff"]', (element) => element.getAttribute('aria-pressed')),
+      'true',
+    );
+    const backgroundCard = await page.$('#backgroundCard');
+    await backgroundCard.screenshot({ path: path.join(SCREENSHOTS, 'app-background.png') });
+
+    await page.click('[data-bg="#dbe9f7"]');
+    await sleep(500);
+    const blueCorner = await getPhotoCorner(page);
+    close(blueCorner.topLeft[0], 219, 5, 'pale blue R');
+    close(blueCorner.topLeft[1], 233, 5, 'pale blue G');
+    close(blueCorner.topLeft[2], 247, 5, 'pale blue B');
+    assert.equal(
+      await page.evaluate(() => window.__passportApp.state.background.color),
+      '#dbe9f7',
+    );
+
+    await page.click('[data-bg="original"]');
+    await sleep(400);
+    const restoredCorner = await getPhotoCorner(page);
+    assert.ok(
+      !restoredCorner.topLeft.slice(0, 3).every((value) => value > 245),
+      'original background should return when background replacement is off',
+    );
+    assert.equal(
+      await page.$eval('#bgToggle', (element) => element.getAttribute('aria-checked')),
+      'false',
+    );
+
+    await page.click('[data-bg="#ffffff"]');
+    await sleep(400);
+    const reEnabledCorner = await getPhotoCorner(page);
+    assert.ok(reEnabledCorner.topLeft.slice(0, 3).every((value) => value > 248));
+
+    console.log('8c. reframe with the face suggestion for the final preview');
+    await page.$eval('#btnDetectFace', (element) =>
+      element.scrollIntoView({ block: 'center', behavior: 'instant' }),
+    );
+    await sleep(120);
+    await page.click('#btnDetectFace');
+    await page.waitForFunction(
+      () => /crop updated/i.test(document.getElementById('faceStatusText').textContent),
+      { timeout: 30000 },
+    );
+    await sleep(500);
 
     console.log('9. generate full-resolution preview');
     await page.click('#btnGenerate');
@@ -501,8 +622,26 @@ async function main() {
       0,
       'all geometry checks should pass',
     );
+    const exportCorner = await page.evaluate(() => {
+      const canvas = window.__passportApp.state.exportAssets?.canvas;
+      if (!canvas) return null;
+      const context = canvas.getContext('2d');
+      return Array.from(context.getImageData(3, 3, 1, 1).data);
+    });
+    assert.ok(exportCorner, 'export canvas should exist');
+    assert.ok(
+      exportCorner.slice(0, 3).every((value) => value > 248),
+      `exported print photo should have a white background: ${exportCorner}`,
+    );
 
     await sleep(4800); // let transient toasts clear before the review screenshot
+    await page.evaluate(() => {
+      const sheet = document.getElementById('sheet');
+      const rect = sheet.getBoundingClientRect();
+      const top = rect.top + window.scrollY - Math.max(84, (window.innerHeight - rect.height) / 2);
+      window.scrollTo({ top: Math.max(0, top), behavior: 'instant' });
+    });
+    await sleep(350);
     await page.screenshot({ path: path.join(SCREENSHOTS, 'app-desktop.png') });
     const sheetHandle = await page.$('#sheet');
     await sheetHandle.screenshot({ path: path.join(SCREENSHOTS, 'sheet-closeup.png') });

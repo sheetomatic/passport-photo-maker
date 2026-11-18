@@ -1,5 +1,5 @@
 /* Passport Photo Maker service worker — offline app shell + on-demand vendor cache. */
-const CACHE_VERSION = 'ppm-v1';
+const CACHE_VERSION = 'ppm-v2';
 const CACHE = `passport-photo-maker-${CACHE_VERSION}`;
 
 const CORE_ASSETS = [
@@ -12,10 +12,12 @@ const CORE_ASSETS = [
   './js/crop.js',
   './js/image-processing.js',
   './js/face-detect.js',
+  './js/background.js',
   './js/pdf.js',
   './js/print.js',
   './js/pwa.js',
   './vendor/jspdf.umd.min.js',
+  './vendor/mediapipe/selfie_segmenter.tflite',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',

@@ -152,7 +152,7 @@
             <h2>Basic Photo Enhancement</h2>
             <span class="info-tag">On-device</span>
           </header>
-          <p class="card-sub">Tone, white balance and light sharpening. Your original is always kept.</p>
+          <p class="card-sub">Tone, white balance, light skin smoothing and detail. Your original is always kept.</p>
 
           <div class="compare" role="group" aria-label="Choose original or enhanced photo">
             <button type="button" class="compare-option" id="optOriginal" aria-pressed="false">
@@ -164,9 +164,14 @@
               <span class="compare-label">Enhanced</span>
             </button>
           </div>
-          <p class="compare-note" id="enhanceStatus">Enhanced tone is applied. Compare with the original any time.</p>
+          <p class="compare-note" id="enhanceStatus">Auto tone, colour and detail are applied on-device. Compare with the original any time.</p>
 
           <div class="sliders">
+            <label class="slider-row" for="strength">
+              <span class="slider-name">Auto strength</span>
+              <output id="strengthValue" for="strength">80</output>
+              <input type="range" id="strength" min="0" max="100" step="1" value="80">
+            </label>
             <label class="slider-row" for="brightness">
               <span class="slider-name">Brightness</span>
               <output id="brightnessValue" for="brightness">0</output>
@@ -174,13 +179,23 @@
             </label>
             <label class="slider-row" for="contrast">
               <span class="slider-name">Contrast</span>
-              <output id="contrastValue" for="contrast">0</output>
-              <input type="range" id="contrast" min="-60" max="60" step="1" value="0">
+              <output id="contrastValue" for="contrast">+5</output>
+              <input type="range" id="contrast" min="-60" max="60" step="1" value="5">
+            </label>
+            <label class="slider-row" for="warmth">
+              <span class="slider-name">Warmth</span>
+              <output id="warmthValue" for="warmth">0</output>
+              <input type="range" id="warmth" min="-30" max="30" step="1" value="0">
             </label>
             <label class="slider-row" for="sharpness">
               <span class="slider-name">Sharpness</span>
-              <output id="sharpnessValue" for="sharpness">30</output>
-              <input type="range" id="sharpness" min="0" max="100" step="1" value="30">
+              <output id="sharpnessValue" for="sharpness">50</output>
+              <input type="range" id="sharpness" min="0" max="100" step="1" value="50">
+            </label>
+            <label class="slider-row" for="smoothing">
+              <span class="slider-name">Skin smoothing</span>
+              <output id="smoothingValue" for="smoothing">30</output>
+              <input type="range" id="smoothing" min="0" max="100" step="1" value="30">
             </label>
           </div>
 
@@ -188,6 +203,58 @@
             <button type="button" class="btn btn-quiet" id="btnResetEnhance">Reset adjustments</button>
             <button type="button" class="btn btn-tonal" id="btnUseEnhanced">Use Enhanced Photo</button>
           </div>
+        </section>
+
+        <section class="card panel-card" id="backgroundCard">
+          <header class="card-head">
+            <h2>Background</h2>
+            <span class="info-tag">On-device</span>
+          </header>
+          <p class="card-sub">Replace a busy background with a plain passport colour. Automatic cutout — check hair and ears before printing.</p>
+
+          <div class="bg-toggle-row">
+            <span id="bgToggleLabel">Remove background</span>
+            <button type="button" class="switch" id="bgToggle" role="switch" aria-checked="false" aria-labelledby="bgToggleLabel">
+              <span class="switch-thumb"></span>
+            </button>
+          </div>
+
+          <div class="bg-options" id="bgOptions" role="group" aria-label="Background colour">
+            <button type="button" class="bg-option is-selected" data-bg="original" aria-pressed="true">
+              <span class="bg-swatch bg-original-swatch" aria-hidden="true"></span>
+              <span class="bg-name">Original</span>
+            </button>
+            <button type="button" class="bg-option" data-bg="#ffffff" aria-pressed="false">
+              <span class="bg-swatch" style="--bg-color:#ffffff" aria-hidden="true"></span>
+              <span class="bg-name">White</span>
+            </button>
+            <button type="button" class="bg-option" data-bg="#dbe9f7" aria-pressed="false">
+              <span class="bg-swatch" style="--bg-color:#dbe9f7" aria-hidden="true"></span>
+              <span class="bg-name">Blue</span>
+            </button>
+            <button type="button" class="bg-option" data-bg="#e7e5df" aria-pressed="false">
+              <span class="bg-swatch" style="--bg-color:#e7e5df" aria-hidden="true"></span>
+              <span class="bg-name">Grey</span>
+            </button>
+            <label class="bg-option bg-custom" id="bgCustomOption">
+              <span class="bg-swatch" id="bgCustomSwatch" style="--bg-color:#ffffff">
+                <input type="color" id="bgCustom" value="#ffffff" aria-label="Custom background colour">
+              </span>
+              <span class="bg-name">Custom</span>
+            </label>
+          </div>
+
+          <div class="field-row bg-edge">
+            <label for="bgFeather">Edge softness</label>
+            <output id="bgFeatherValue" for="bgFeather">20</output>
+            <input type="range" id="bgFeather" min="0" max="100" step="1" value="20" disabled>
+          </div>
+
+          <p class="face-status" id="bgStatus" data-state="idle" role="status" aria-live="polite">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="bgStatusText">Original background.</span>
+          </p>
+          <p class="bg-warning" id="bgWarning" hidden>Automatic cutouts can leave a faint halo around fine hair. Check the preview at full size before printing.</p>
         </section>
 
         <section class="card panel-card" id="cropCard">
