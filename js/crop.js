@@ -6,7 +6,7 @@
  * fits inside the photo (cover), so there is never any empty space.
  */
 
-import { clamp, LIMITS } from './geometry.js';
+import { clamp, LIMITS } from '#app/geometry';
 
 export const CROP_ASPECT = 7 / 9; // width / height
 

@@ -257,12 +257,18 @@ Redeploy after changes:
 git add . && git commit -m "Update app" && git push
 ```
 
-The service worker caches a versioned shell. Bump `CACHE_VERSION` in `sw.js`
-when changing shell assets so returning visitors receive the new build.
+The shell is versioned twice for safe upgrades: `styles.css?v=3`, the module
+import map and `sw.js` cache version. When changing shell assets, bump all three
+(`v=3` in `index.html`, the import map and `CACHE_VERSION` in `sw.js`). The
+service worker is network-first for HTML/CSS/JS and precaches with `cache:
+'reload'`, so a deployment cannot mix new HTML with an old stylesheet.
+
+If an already-installed copy is showing an older layout, close and reopen it,
+or reload the page once; the versioned asset URLs bypass the old cache.
 
 ## Browser support
 
-- Chrome / Edge 91+, Safari 16.4+, Firefox 90+.
+- Chrome / Edge 91+, Safari 16.4+, Firefox 108+ (the module import map requires a modern browser).
 - PWA installation: Chrome/Edge/Android, Safari on iOS/iPadOS. Service workers require HTTPS or localhost.
 - Camera capture uses the platform camera picker; this is a secure-context-independent native input.
 - Web Share with files needs a secure context (HTTPS or localhost). The direct print fallback covers plain HTTP.

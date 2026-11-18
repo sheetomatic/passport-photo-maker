@@ -8,7 +8,7 @@
  * 100% / Actual Size in the dialog is what makes the paper output physical.
  */
 
-import { buildGuideSegments } from './geometry.js';
+import { buildGuideSegments } from '#app/geometry';
 
 const mmValue = (value) => Number(value.toFixed(4));
 

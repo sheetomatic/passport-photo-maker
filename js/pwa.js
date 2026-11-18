@@ -4,6 +4,19 @@
  */
 
 const swSupported = 'serviceWorker' in navigator;
+const hadServiceWorkerController = Boolean(navigator.serviceWorker?.controller);
+let reloadingForUpdate = false;
+
+// If this page was controlled by an older worker and a new version takes over,
+// reload once so HTML, CSS and JS all come from the same build.
+navigator.serviceWorker?.addEventListener('controllerchange', () => {
+  if (!hadServiceWorkerController || reloadingForUpdate) return;
+  reloadingForUpdate = true;
+  window.location.reload();
+});
+
+window.__PASSPORT_APP_VERSION__ = '3';
+
 const standalone =
   window.matchMedia?.('(display-mode: standalone)').matches ||
   window.navigator.standalone === true;

@@ -1,10 +1,25 @@
-/* Passport Photo Maker service worker — offline app shell + on-demand vendor cache. */
-const CACHE_VERSION = 'ppm-v2';
+/* Passport Photo Maker service worker — versioned shell, offline fallback, vendor cache. */
+const CACHE_VERSION = 'ppm-v3';
 const CACHE = `passport-photo-maker-${CACHE_VERSION}`;
+const ASSET_VERSION = '3';
 
 const CORE_ASSETS = [
   './',
   './index.html',
+  // Versioned shell assets: the page loads these exact URLs, so a deploy can
+  // never mix new HTML with an old cached stylesheet or module.
+  './styles.css?v=3',
+  './js/app.js?v=3',
+  './js/geometry.js?v=3',
+  './js/crop.js?v=3',
+  './js/image-processing.js?v=3',
+  './js/face-detect.js?v=3',
+  './js/background.js?v=3',
+  './js/pdf.js?v=3',
+  './js/print.js?v=3',
+  './js/pwa.js?v=3',
+  // Keep the unversioned copies too so an older open tab cannot break when the
+  // previous cache is removed during activation.
   './styles.css',
   './manifest.json',
   './js/app.js',
@@ -29,7 +44,12 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE)
-      .then((cache) => cache.addAll(CORE_ASSETS))
+      // cache: 'reload' bypasses the browser HTTP cache, which GitHub Pages
+      // holds for 10 minutes and which previously caused stale CSS to be
+      // written into a brand-new service-worker cache.
+      .then((cache) =>
+        cache.addAll(CORE_ASSETS.map((url) => new Request(url, { cache: 'reload' }))),
+      )
       .then(() => self.skipWaiting()),
   );
 });
@@ -41,9 +61,7 @@ self.addEventListener('activate', (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter(
-              (key) => key.startsWith('passport-photo-maker-') && key !== CACHE,
-            )
+            .filter((key) => key.startsWith('passport-photo-maker-') && key !== CACHE)
             .map((key) => caches.delete(key)),
         ),
       )
@@ -57,16 +75,31 @@ self.addEventListener('message', (event) => {
 
 async function cacheResponse(request, response) {
   if (!response || response.status !== 200) return response;
-  const copy = response.clone();
   const cache = await caches.open(CACHE);
-  await cache.put(request, copy);
+  await cache.put(request, response.clone());
   return response;
+}
+
+async function networkFirst(event, fallbackUrl = null) {
+  const { request } = event;
+  try {
+    const response = await fetch(new Request(request, { cache: 'no-cache' }));
+    if (response && response.status === 200) {
+      await cacheResponse(request, response.clone());
+    }
+    return response;
+  } catch {
+    return (
+      (await caches.match(request)) ||
+      (fallbackUrl ? await caches.match(fallbackUrl) : null) ||
+      Response.error()
+    );
+  }
 }
 
 async function handleNavigation(event) {
   try {
-    const response = await fetch(event.request);
-    // Keep the latest shell for offline launches.
+    const response = await fetch(new Request(event.request, { cache: 'no-cache' }));
     if (response && response.ok) {
       const cache = await caches.open(CACHE);
       await cache.put('./index.html', response.clone());
@@ -89,9 +122,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // The MediaPipe WASM/model are several megabytes; cache them once, never
-  // re-download them just to refresh an app asset.
-  if (url.pathname.includes('/vendor/mediapipe/')) {
+  // Vendor models and WASM are large and immutable; cache them once.
+  if (url.pathname.includes('/vendor/')) {
     event.respondWith(
       caches.match(request).then(
         (cached) =>
@@ -99,6 +131,13 @@ self.addEventListener('fetch', (event) => {
           fetch(request).then((response) => cacheResponse(request, response)),
       ),
     );
+    return;
+  }
+
+  // The app shell is always checked against the network when online. This is
+  // the critical bit that prevents mixed versions after a deployment.
+  if (/\.(?:css|js|mjs|json|html)$/i.test(url.pathname)) {
+    event.respondWith(networkFirst(event));
     return;
   }
 

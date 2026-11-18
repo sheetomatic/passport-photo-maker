@@ -11,7 +11,7 @@
  * labelled "Basic Photo Enhancement" because that is exactly what it is.
  */
 
-import { clamp } from './geometry.js';
+import { clamp } from '#app/geometry';
 
 export const MAX_FILE_BYTES = 40 * 1024 * 1024;
 export const WARN_FILE_BYTES = 15 * 1024 * 1024;

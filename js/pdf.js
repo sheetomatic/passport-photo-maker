@@ -10,7 +10,7 @@ import {
   buildGuideSegments,
   mm,
   verifyLayout,
-} from './geometry.js';
+} from '#app/geometry';
 
 const ALIAS = 'passportPhoto';
 const GUIDE_RGB = [122, 122, 122];

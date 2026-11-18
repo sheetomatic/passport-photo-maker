@@ -14,7 +14,7 @@ import {
   MODES,
   LIMITS,
   buildGuideSegments,
-} from './geometry.js';
+} from '#app/geometry';
 import {
   loadPhoto,
   renderCrop,
@@ -23,7 +23,7 @@ import {
   validatePhotoFile,
   UserError,
   DEFAULT_ENHANCE_SETTINGS,
-} from './image-processing.js';
+} from '#app/image-processing';
 import {
   createCropState,
   getCropRect,
@@ -31,11 +31,11 @@ import {
   panCropByPixels,
   setCropZoom,
   suggestCropFromFace,
-} from './crop.js';
-import { detectFace } from './face-detect.js';
-import { createBackgroundMask } from './background.js';
-import { buildPdfDocument, pdfBytes } from './pdf.js';
-import { buildPrintDocument, printHtmlDocument } from './print.js';
+} from '#app/crop';
+import { detectFace } from '#app/face-detect';
+import { createBackgroundMask } from '#app/background';
+import { buildPdfDocument, pdfBytes } from '#app/pdf';
+import { buildPrintDocument, printHtmlDocument } from '#app/print';
 
 const PREVIEW_WIDTH = 420; // 7:9 -> 420 x 540
 const PREVIEW_EDITOR_SIDE = 1200;

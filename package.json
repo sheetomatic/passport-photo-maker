@@ -14,5 +14,14 @@
   },
   "devDependencies": {
     "puppeteer-core": "^24.10.0"
+  },
+  "imports": {
+    "#app/geometry": "./js/geometry.js",
+    "#app/image-processing": "./js/image-processing.js",
+    "#app/crop": "./js/crop.js",
+    "#app/face-detect": "./js/face-detect.js",
+    "#app/background": "./js/background.js",
+    "#app/pdf": "./js/pdf.js",
+    "#app/print": "./js/print.js"
   }
 }
