@@ -10,9 +10,11 @@
 
 const SESSION_KEY = "ppm.billing.session.v1";
 const DEFAULT_API = "/api/ppm";
+const WORKSPACE_API = "https://workspace.sheetomatic.com/api/ppm";
 const PRODUCTION_HOSTS = new Set([
   "ppm.sheetomatic.com",
   "ppm.8.234.99.111.sslip.io",
+  "sheetomatic.github.io",
 ]);
 
 const $ = (id) => document.getElementById(id);
@@ -66,7 +68,11 @@ export function createBilling({ toast = () => {} } = {}) {
 
   let razorpayScript = null;
 
-  const apiBase = () => window.__PPM_BILLING_API__ || DEFAULT_API;
+  const apiBase = () =>
+    window.__PPM_BILLING_API__ ||
+    (window.location.hostname === "sheetomatic.github.io"
+      ? WORKSPACE_API
+      : DEFAULT_API);
 
   function eligibleHost() {
     const force =

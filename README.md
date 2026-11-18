@@ -6,9 +6,9 @@ Upload one portrait — or take one with your phone camera — → enhance, clea
 
 Photo editing runs entirely on the device. A Sheetomatic account is used only for the subscription/licensing and invoice flow; **photos are never uploaded**. There is no analytics.
 
-**GitHub Pages preview:** https://sheetomatic.github.io/passport-photo-maker/ — free and installable as a PWA.
+**Current public app:** https://sheetomatic.github.io/passport-photo-maker/ — installable PWA with account registration, the ₹100/month subscription and invoices through the Sheetomatic Workspace API.
 
-**Production target:** https://ppm.sheetomatic.com/ — GCP-hosted app with account sign-in, the ₹100/month subscription, and invoices. Billing is only active on this host.
+**Production GCP URL:** https://ppm.sheetomatic.com/ — same build served by Caddy on the GCP VM (pending its DNS A record).
 
 ![Desktop app](screenshots/app-desktop.png)
 
@@ -108,7 +108,7 @@ For local LAN testing, `npm run dev:lan` prints the phone URL (same Wi-Fi; allow
 - The first PDF/print export is free per account. Subsequent exports require an active subscription.
 - The subscription is **₹100/month** through Razorpay. Payment receipts are stored as invoices and can be downloaded as PDF from the account panel.
 - Cancellation is self-serve and takes effect at the end of the current billing period.
-- Billing only activates on the production PPM host; the GitHub Pages preview stays free.
+- The app uses the Sheetomatic Workspace API for accounts, subscriptions and invoices; photo processing remains local.
 - Invoices are payment receipts. GST/tax invoicing requires the seller GST configuration; the current receipt says tax treatment is as applicable.
 - This is a client-enforced export gate, not DRM: a user who modifies the static client can bypass it. Hard enforcement would require server-side PDF rendering.
 
@@ -304,9 +304,9 @@ Redeploy after changes:
 git add . && git commit -m "Update app" && git push
 ```
 
-The shell is versioned twice for safe upgrades: `styles.css?v=6`, the module
+The shell is versioned twice for safe upgrades: `styles.css?v=7`, the module
 import map and `sw.js` cache version. When changing shell assets, bump all three
-(`v=6` in `index.html`, the import map and `CACHE_VERSION` in `sw.js`). The
+(`v=7` in `index.html`, the import map and `CACHE_VERSION` in `sw.js`). The
 service worker is network-first for HTML/CSS/JS and precaches with `cache:
 'reload'`, so a deployment cannot mix new HTML with an old stylesheet.
 
