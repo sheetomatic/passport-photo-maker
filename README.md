@@ -6,9 +6,9 @@ Upload one portrait — or take one with your phone camera — → enhance, clea
 
 Photo editing runs entirely on the device. A Sheetomatic account is used only for the subscription/licensing and invoice flow; **photos are never uploaded**. There is no analytics.
 
-**Current public app:** https://sheetomatic.github.io/passport-photo-maker/ — installable PWA with account registration, the ₹100/month subscription and invoices through the Sheetomatic Workspace API.
+**Production app:** https://ppm.sheetomatic.com/ — GCP-hosted, installable PWA with account registration, a 3-month free trial, the ₹100/month subscription and invoices.
 
-**Production GCP URL:** https://ppm.sheetomatic.com/ — same build served by Caddy on the GCP VM (pending its DNS A record).
+**Mirror:** https://sheetomatic.github.io/passport-photo-maker/ — same build via GitHub Pages, using the Sheetomatic Workspace API.
 
 ![Desktop app](screenshots/app-desktop.png)
 
