@@ -1,24 +1,24 @@
 /**
  * geometry.js — the single source of truth for every physical dimension.
  *
- * Everything is expressed in millimetres. The preview, the PDF and the print
- * document all consume `computeLayout()` so they cannot drift apart.
+ * Photos are always 35 x 45 mm on A4 portrait. The layout supports a
+ * configurable quantity and gap; rows are balanced and centred, and the whole
+ * block is top-aligned by default. The default (6 photos, 0 mm gap) is the
+ * exact edge-to-edge six-up row.
  */
 
 export const PAGE = Object.freeze({ widthMm: 210, heightMm: 297 });
 export const PHOTO = Object.freeze({
   widthMm: 35,
   heightMm: 45,
-  aspect: 7 / 9, // width / height
+  aspect: 7 / 9,
   count: 6,
 });
-export const MODES = Object.freeze({ EXACT: 'exact', SAFE: 'safe' });
 export const PLACEMENTS = Object.freeze({ TOP: 'top', CENTRE: 'centre' });
-export const GUIDE_STYLES = Object.freeze(['cutmarks', 'hairline', 'none']);
 
 export const LIMITS = Object.freeze({
-  safeMarginMm: { min: 0, max: 15, step: 0.5, default: 6 },
-  gapMm: { min: 0, max: 8, step: 0.25, default: 2 },
+  photoCount: { min: 1, max: 24, step: 1, default: 6 },
+  gapMm: { min: 0, max: 8, step: 0.5, default: 0 },
   verticalOffsetMm: { min: 0, max: 80, step: 1, default: 0 },
   zoom: { min: 1, max: 4 },
 });
@@ -43,117 +43,108 @@ export function mm(value) {
 /** A stable key so exports can be cached and invalidated honestly. */
 export function layoutKey(layout) {
   return [
-    layout.mode,
+    layout.photoCount,
+    layout.gapMm.toFixed(5),
     layout.photoWidthMm.toFixed(5),
     layout.photoHeightMm.toFixed(5),
-    layout.gapMm.toFixed(5),
-    layout.sideMarginMm.toFixed(5),
-    layout.rowY.toFixed(5),
+    layout.blockX.toFixed(5),
+    layout.blockY.toFixed(5),
   ].join(':');
 }
 
 /**
  * Compute the A4 sheet.
  *
- * EXACT: photo width is exactly 35 mm. Six of them span 210 mm, so margins and
- * gaps must both be zero — the maths has no other solution. A4 height is 297,
- * the row is 45 mm, so centring puts it at 126 mm.
- *
- * SAFE: the six photos must fit inside `210 - 2 * margin`, with five gaps.
- * width = (210 - 2m - 5g) / 6 and height always follows the 7:9 ratio, so the
- * photos are smaller than 35 x 45 and the UI must say so.
- *
- * The row is top-aligned by default. In EXACT mode that means y = 0 (the row
- * starts at the paper's top edge); in SAFE mode it starts at the configured
- * safe margin so the printer can reproduce it. `verticalPlacement: 'centre'`
- * restores the 126 mm centred position, and the nudge only ever moves down.
+ * With 35 mm photos and no gap, six fit exactly across the 210 mm width.
+ * Adding a gap wraps the block into balanced rows, because six 35 mm photos
+ * plus gaps cannot fit in one row. Every photo stays exactly 35 x 45 mm.
  */
 export function computeLayout(input = {}) {
-  const mode = input.mode === MODES.SAFE ? MODES.SAFE : MODES.EXACT;
-  const safeMarginMm = clamp(
-    numberOr(input.safeMarginMm, LIMITS.safeMarginMm.default),
-    LIMITS.safeMarginMm.min,
-    LIMITS.safeMarginMm.max,
+  const requestedCount = Math.round(
+    numberOr(input.photoCount, LIMITS.photoCount.default),
   );
-  const requestedGapMm = clamp(
+  const photoCount = clamp(requestedCount, LIMITS.photoCount.min, LIMITS.photoCount.max);
+  const gapMm = clamp(
     numberOr(input.gapMm, LIMITS.gapMm.default),
     LIMITS.gapMm.min,
     LIMITS.gapMm.max,
   );
+  const verticalPlacement =
+    input.verticalPlacement === PLACEMENTS.CENTRE ? PLACEMENTS.CENTRE : PLACEMENTS.TOP;
   const nudgeMm = clamp(
     numberOr(input.verticalOffsetMm, LIMITS.verticalOffsetMm.default),
     LIMITS.verticalOffsetMm.min,
     LIMITS.verticalOffsetMm.max,
   );
-  const verticalPlacement =
-    input.verticalPlacement === PLACEMENTS.CENTRE ? PLACEMENTS.CENTRE : PLACEMENTS.TOP;
 
-  let photoWidthMm;
-  let gapMm;
-  let sideMarginMm;
+  const photoWidthMm = PHOTO.widthMm;
+  const photoHeightMm = PHOTO.heightMm;
 
-  if (mode === MODES.EXACT) {
-    photoWidthMm = PHOTO.widthMm;
-    gapMm = 0;
-    sideMarginMm = 0;
-  } else {
-    sideMarginMm = safeMarginMm;
-    gapMm = requestedGapMm;
-    const usableWidth = PAGE.widthMm - sideMarginMm * 2 - gapMm * (PHOTO.count - 1);
-    photoWidthMm = Math.max(10, usableWidth / PHOTO.count);
+  // A gap consumes horizontal space, so fewer photos fit per row.
+  const maxColumns = Math.max(
+    1,
+    Math.floor((PAGE.widthMm + gapMm) / (photoWidthMm + gapMm)),
+  );
+  const rows = Math.ceil(photoCount / maxColumns);
+  const columns = Math.ceil(photoCount / rows);
+
+  const blockWidth = columns * photoWidthMm + Math.max(0, columns - 1) * gapMm;
+  const blockHeight = rows * photoHeightMm + Math.max(0, rows - 1) * gapMm;
+  const blockX = (PAGE.widthMm - blockWidth) / 2;
+  const centredY = (PAGE.heightMm - blockHeight) / 2;
+  const baseY = verticalPlacement === PLACEMENTS.CENTRE ? centredY : 0;
+  const blockY = clamp(baseY + nudgeMm, 0, PAGE.heightMm - blockHeight);
+
+  const photos = [];
+  for (let row = 0; row < rows; row += 1) {
+    const countInRow = Math.min(columns, photoCount - row * columns);
+    const rowWidth =
+      countInRow * photoWidthMm + Math.max(0, countInRow - 1) * gapMm;
+    const rowX = blockX + (blockWidth - rowWidth) / 2;
+    const y = blockY + row * (photoHeightMm + gapMm);
+    for (let column = 0; column < countInRow; column += 1) {
+      photos.push({
+        index: photos.length,
+        row,
+        column,
+        x: rowX + column * (photoWidthMm + gapMm),
+        y,
+        widthMm: photoWidthMm,
+        heightMm: photoHeightMm,
+      });
+    }
   }
 
-  const photoHeightMm = (photoWidthMm * PHOTO.heightMm) / PHOTO.widthMm;
-  const rowWidthMm = photoWidthMm * PHOTO.count + gapMm * (PHOTO.count - 1);
-  const rowX = (PAGE.widthMm - rowWidthMm) / 2;
-  const centredRowY = (PAGE.heightMm - photoHeightMm) / 2;
-  const topBaseY = mode === MODES.SAFE ? sideMarginMm : 0;
-  const baseRowY = verticalPlacement === PLACEMENTS.CENTRE ? centredRowY : topBaseY;
-  const rowY = clamp(baseRowY + nudgeMm, 0, PAGE.heightMm - photoHeightMm);
-
-  const photos = Array.from({ length: PHOTO.count }, (_, index) => ({
-    index,
-    x: rowX + index * (photoWidthMm + gapMm),
-    y: rowY,
-    widthMm: photoWidthMm,
-    heightMm: photoHeightMm,
-  }));
-
-  const isReduced = photoWidthMm < PHOTO.widthMm - 1e-9;
   const withinPage =
-    rowX >= -1e-9 &&
-    rowX + rowWidthMm <= PAGE.widthMm + 1e-9 &&
-    rowY >= -1e-9 &&
-    rowY + photoHeightMm <= PAGE.heightMm + 1e-9;
+    blockX >= -1e-9 &&
+    blockX + blockWidth <= PAGE.widthMm + 1e-9 &&
+    blockY >= -1e-9 &&
+    blockY + blockHeight <= PAGE.heightMm + 1e-9;
 
   return {
-    mode,
     pageWidthMm: PAGE.widthMm,
     pageHeightMm: PAGE.heightMm,
-    photoCount: PHOTO.count,
+    photoCount,
+    requestedPhotoCount: requestedCount,
     photoWidthMm,
     photoHeightMm,
-    requestedPhotoWidthMm: PHOTO.widthMm,
-    isReduced,
-    reductionMm: PHOTO.widthMm - photoWidthMm,
     gapMm,
-    sideMarginMm,
-    rowX,
-    rowY,
-    rowWidthMm,
-    rowHeightMm: photoHeightMm,
-    centredRowY,
+    columns,
+    rows,
+    maxColumns,
+    blockX,
+    blockY,
+    blockWidth,
+    blockHeight,
+    centredBlockY: centredY,
     verticalPlacement,
-    baseRowY,
-    appliedOffsetMm: rowY - baseRowY,
+    appliedOffsetMm: blockY - baseY,
     nudgeMm,
-    horizontalWhitespaceMm: rowX, // equals sideMarginMm by construction
-    verticalWhitespaceMm: rowY,
-    totalPhotoWidthMm: photoWidthMm * PHOTO.count,
-    bottomWhitespaceMm: PAGE.heightMm - (rowY + photoHeightMm),
-    edgeToEdge: mode === MODES.EXACT,
-    withinPage,
+    sideMarginMm: blockX,
+    topMarginMm: blockY,
+    bottomWhitespaceMm: PAGE.heightMm - (blockY + blockHeight),
     photos,
+    withinPage,
   };
 }
 
@@ -173,55 +164,41 @@ export function pixelSizeForPhoto(widthMm, dpi) {
 }
 
 /**
- * Cut guides, in millimetres, as plain line segments. Used by the preview SVG,
- * the PDF (jsPDF lines) and the print document (SVG) alike.
+ * Cut guides, in millimetres. Corner marks trace each photo without covering
+ * the centre; hairlines follow every photo edge.
  */
 export function buildGuideSegments(layout, style = 'cutmarks') {
   if (!style || style === 'none') return [];
   const segments = [];
-  const { photos, rowX, rowY, rowWidthMm, rowHeightMm } = layout;
-  const pageW = layout.pageWidthMm;
-  const pageH = layout.pageHeightMm;
+  const tick = 2.4;
 
   if (style === 'hairline') {
-    const xs = new Set();
-    for (const photo of photos) {
-      xs.add(photo.x);
-      xs.add(photo.x + photo.widthMm);
+    for (const photo of layout.photos) {
+      const { x, y, widthMm, heightMm } = photo;
+      segments.push(
+        { x1: x, y1: y, x2: x + widthMm, y2: y },
+        { x1: x, y1: y + heightMm, x2: x + widthMm, y2: y + heightMm },
+        { x1: x, y1: y, x2: x, y2: y + heightMm },
+        { x1: x + widthMm, y1: y, x2: x + widthMm, y2: y + heightMm },
+      );
     }
-    for (const x of xs) {
-      if (x > 0.05 && x < pageW - 0.05) {
-        segments.push({ x1: x, y1: rowY, x2: x, y2: rowY + rowHeightMm });
-      }
-    }
-    segments.push({ x1: rowX, y1: rowY, x2: rowX + rowWidthMm, y2: rowY });
-    segments.push({
-      x1: rowX,
-      y1: rowY + rowHeightMm,
-      x2: rowX + rowWidthMm,
-      y2: rowY + rowHeightMm,
-    });
-  } else if (style === 'cutmarks') {
-    const boundaries = new Set();
-    for (const photo of photos) {
-      boundaries.add(photo.x);
-      boundaries.add(photo.x + photo.widthMm);
-    }
-    const tick = 4;
-    for (const x of boundaries) {
-      const topStart = Math.max(0, rowY - tick);
-      const bottomEnd = Math.min(pageH, rowY + rowHeightMm + tick);
-      if (rowY - topStart > 0.4) {
-        segments.push({ x1: x, y1: topStart, x2: x, y2: rowY - 0.8 });
-      }
-      if (bottomEnd - (rowY + rowHeightMm) > 0.4) {
-        segments.push({
-          x1: x,
-          y1: rowY + rowHeightMm + 0.8,
-          x2: x,
-          y2: bottomEnd,
-        });
-      }
+    return segments;
+  }
+
+  if (style === 'cutmarks') {
+    for (const photo of layout.photos) {
+      const { x, y, widthMm, heightMm } = photo;
+      const T = Math.min(tick, widthMm / 3, heightMm / 3);
+      segments.push(
+        { x1: x, y1: y, x2: x + T, y2: y },
+        { x1: x, y1: y, x2: x, y2: y + T },
+        { x1: x + widthMm - T, y1: y, x2: x + widthMm, y2: y },
+        { x1: x + widthMm, y1: y, x2: x + widthMm, y2: y + T },
+        { x1: x, y1: y + heightMm - T, x2: x, y2: y + heightMm },
+        { x1: x, y1: y + heightMm, x2: x + T, y2: y + heightMm },
+        { x1: x + widthMm - T, y1: y + heightMm, x2: x + widthMm, y2: y + heightMm },
+        { x1: x + widthMm, y1: y + heightMm - T, x2: x + widthMm, y2: y + heightMm },
+      );
     }
   }
 
@@ -231,19 +208,37 @@ export function buildGuideSegments(layout, style = 'cutmarks') {
 /** Physical truth checks, surfaced in the UI and enforced before export. */
 export function verifyLayout(layout) {
   const count = layout.photos.length;
-  const rowAligned = layout.photos.every(
-    (photo) => Math.abs(photo.y - layout.rowY) < 1e-9,
-  );
   const ratiosExact = layout.photos.every(
     (photo) => Math.abs(photo.widthMm / photo.heightMm - PHOTO.aspect) < 1e-9,
   );
-  const rowMath =
-    Math.abs(
-      layout.photos.reduce((sum, photo) => sum + photo.widthMm, 0) +
-        layout.gapMm * (count - 1) -
-        layout.rowWidthMm,
-    ) < 1e-9;
   const pageOk = layout.pageWidthMm === 210 && layout.pageHeightMm === 297;
+  const dimsOk = layout.photos.every(
+    (photo) =>
+      Math.abs(photo.widthMm - PHOTO.widthMm) < 1e-9 &&
+      Math.abs(photo.heightMm - PHOTO.heightMm) < 1e-9,
+  );
+  const gapsOk = (() => {
+    if (layout.photoCount < 2) return true;
+    for (const photo of layout.photos) {
+      const sameRow = layout.photos.find(
+        (candidate) =>
+          candidate.row === photo.row && candidate.column === photo.column + 1,
+      );
+      if (sameRow) {
+        const gap = sameRow.x - (photo.x + photo.widthMm);
+        if (Math.abs(gap - layout.gapMm) > 1e-9) return false;
+      }
+      const below = layout.photos.find(
+        (candidate) =>
+          candidate.row === photo.row + 1 && candidate.column === photo.column,
+      );
+      if (below) {
+        const gap = below.y - (photo.y + photo.heightMm);
+        if (Math.abs(gap - layout.gapMm) > 1e-9) return false;
+      }
+    }
+    return true;
+  })();
   const inside = layout.photos.every(
     (photo) =>
       photo.x >= -1e-9 &&
@@ -251,21 +246,27 @@ export function verifyLayout(layout) {
       photo.y >= -1e-9 &&
       photo.y + photo.heightMm <= 297 + 1e-9,
   );
-  const dimsOk =
-    layout.mode === MODES.EXACT
-      ? Math.abs(layout.photoWidthMm - 35) < 1e-9 &&
-        Math.abs(layout.photoHeightMm - 45) < 1e-9 &&
-        layout.gapMm === 0 &&
-        layout.sideMarginMm === 0
-      : layout.photoWidthMm <= 35 + 1e-9;
+  const blockFits =
+    layout.blockX >= -1e-9 &&
+    layout.blockX + layout.blockWidth <= 210 + 1e-9 &&
+    layout.blockY >= -1e-9 &&
+    layout.blockY + layout.blockHeight <= 297 + 1e-9;
 
   const checks = [
     { id: 'page', label: 'A4 portrait page 210 × 297 mm', pass: pageOk },
-    { id: 'count', label: 'Six photos in one horizontal row', pass: count === 6 && rowAligned },
-    { id: 'dims', label: 'Photo dimensions match the selected mode', pass: dimsOk },
+    {
+      id: 'count',
+      label: `${layout.photoCount} passport photo${layout.photoCount === 1 ? '' : 's'} on the sheet`,
+      pass: count === layout.photoCount,
+    },
+    { id: 'dims', label: 'Every photo is exactly 35 × 45 mm', pass: dimsOk },
     { id: 'ratio', label: 'Every crop is exactly 7:9 (no stretch)', pass: ratiosExact },
-    { id: 'row', label: 'Row width = photos + gaps', pass: rowMath },
-    { id: 'inside', label: 'All photos sit inside the sheet', pass: inside && layout.withinPage },
+    { id: 'gaps', label: 'Gaps match the selected spacing', pass: gapsOk },
+    {
+      id: 'inside',
+      label: 'All photos sit inside the sheet',
+      pass: inside && blockFits && layout.withinPage,
+    },
   ];
 
   return { checks, allPass: checks.every((check) => check.pass) };

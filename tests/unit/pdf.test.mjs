@@ -51,7 +51,7 @@ function parsePlacements(text) {
 
 test('PDF is one A4 portrait page with six exact 35 x 45 mm images', async () => {
   const jsPDF = await getJsPDF();
-  const layout = computeLayout({ mode: 'exact' });
+  const layout = computeLayout();
   const result = buildPdfDocument({
     jsPDF,
     layout,
@@ -106,9 +106,9 @@ test('PDF is one A4 portrait page with six exact 35 x 45 mm images', async () =>
   close(toMm(steps[0]), 35, 0.002);
 });
 
-test('PDF in printer-safe mode uses the reduced dimensions and margins', async () => {
+test('PDF supports a multi-row quantity with exact 35 x 45 mm photos and gaps', async () => {
   const jsPDF = await getJsPDF();
-  const layout = computeLayout({ mode: 'safe', safeMarginMm: 6, gapMm: 2 });
+  const layout = computeLayout({ photoCount: 8, gapMm: 2 });
   const result = buildPdfDocument({
     jsPDF,
     layout,
@@ -119,23 +119,27 @@ test('PDF in printer-safe mode uses the reduced dimensions and margins', async (
   });
   const text = Buffer.from(result.doc.output('arraybuffer')).toString('latin1');
   const placements = parsePlacements(text);
-  assert.equal(placements.length, 6);
+  assert.equal(placements.length, 8);
+  assert.equal(layout.columns, 4);
+  assert.equal(layout.rows, 2);
 
-  const photoWidthMm = toMm(placements[0].widthPt);
-  const photoHeightMm = toMm(placements[0].heightPt);
-  close(photoWidthMm, 188 / 6, 0.01);
-  close(photoHeightMm, (188 / 6) * (45 / 35), 0.01);
-  assert.ok(photoWidthMm < 35, 'must not claim 35 mm when reduced');
-
-  close(toMm(placements[0].xPt), 6, 0.01);
-  close(toMm(placements[5].xPt + placements[5].widthPt), 204, 0.01);
-  const gapMm = toMm(placements[1].xPt - (placements[0].xPt + placements[0].widthPt));
-  close(gapMm, 2, 0.01);
+  placements.forEach((placement, index) => {
+    const photo = layout.photos[index];
+    close(toMm(placement.widthPt), 35, 0.002);
+    close(toMm(placement.heightPt), 45, 0.002);
+    close(toMm(placement.xPt), photo.x, 0.002);
+    // PDF y is measured up from the bottom-left corner.
+    close(toMm(placement.yPt), 297 - (photo.y + 45), 0.002);
+  });
+  const firstRow = placements.slice(0, 4);
+  const secondRow = placements.slice(4);
+  close(toMm(firstRow[1].xPt - (firstRow[0].xPt + firstRow[0].widthPt)), 2, 0.002);
+  close(toMm(secondRow[0].yPt), 297 - (47 + 45), 0.002);
 });
 
 test('Compressed PDF (the production path) still reports A4 page size', async () => {
   const jsPDF = await getJsPDF();
-  const layout = computeLayout({ mode: 'exact' });
+  const layout = computeLayout();
   const result = buildPdfDocument({
     jsPDF,
     layout,
@@ -150,9 +154,9 @@ test('Compressed PDF (the production path) still reports A4 page size', async ()
   assert.equal((text.match(/\/Type\s*\/Page\b/g) || []).length, 1);
 });
 
-test('Printed labels appear only when explicitly enabled', async () => {
+test('Printed labels are a single block caption and are opt-in', async () => {
   const jsPDF = await getJsPDF();
-  const layout = computeLayout({ mode: 'exact' });
+  const layout = computeLayout({ photoCount: 8, gapMm: 2 });
 
   const without = buildPdfDocument({
     jsPDF,
@@ -163,7 +167,7 @@ test('Printed labels appear only when explicitly enabled', async () => {
     compress: false,
   });
   const withoutText = Buffer.from(without.doc.output('arraybuffer')).toString('latin1');
-  assert.ok(!withoutText.includes('35.00 mm × 45.00 mm'));
+  assert.ok(!withoutText.includes('8 × 35.00 mm × 45.00 mm'));
 
   const withLabels = buildPdfDocument({
     jsPDF,
@@ -174,5 +178,8 @@ test('Printed labels appear only when explicitly enabled', async () => {
     compress: false,
   });
   const withText = Buffer.from(withLabels.doc.output('arraybuffer')).toString('latin1');
-  assert.equal((withText.match(/\(35\.00 mm × 45\.00 mm\) Tj/g) || []).length, 6);
+  assert.equal(
+    (withText.match(/\(8 × 35\.00 mm × 45\.00 mm · 2\.0 mm gaps\) Tj/g) || []).length,
+    1,
+  );
 });

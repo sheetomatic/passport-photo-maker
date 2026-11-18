@@ -15,7 +15,7 @@ navigator.serviceWorker?.addEventListener('controllerchange', () => {
   window.location.reload();
 });
 
-window.__PASSPORT_APP_VERSION__ = '3';
+window.__PASSPORT_APP_VERSION__ = '4';
 
 const standalone =
   window.matchMedia?.('(display-mode: standalone)').matches ||

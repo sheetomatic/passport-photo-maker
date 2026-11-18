@@ -44,7 +44,7 @@ export function buildPdfDocument({
   doc.setFillColor(255, 255, 255);
   doc.rect(0, 0, PAGE.widthMm, PAGE.heightMm, 'F');
 
-  // Six identical placements. The alias makes jsPDF embed the JPEG once.
+  // Identical photo placements. The alias makes jsPDF embed the JPEG once.
   for (const photo of layout.photos) {
     doc.addImage(
       imageDataUrl,
@@ -71,12 +71,15 @@ export function buildPdfDocument({
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6.5);
     doc.setTextColor(...LABEL_RGB);
-    const label = `${mm(layout.photoWidthMm)} × ${mm(layout.photoHeightMm)}`;
-    for (const photo of layout.photos) {
-      doc.text(label, photo.x + photo.widthMm / 2, photo.y + photo.heightMm + 7, {
-        align: 'center',
-      });
-    }
+    const label = `${layout.photoCount} × ${mm(layout.photoWidthMm)} × ${mm(
+      layout.photoHeightMm,
+    )} · ${layout.gapMm.toFixed(1)} mm gaps`;
+    doc.text(
+      label,
+      layout.blockX + layout.blockWidth / 2,
+      layout.blockY + layout.blockHeight + 7,
+      { align: 'center' },
+    );
   }
 
   const widthMm = doc.internal.pageSize.getWidth();
@@ -91,8 +94,10 @@ export function buildPdfDocument({
     },
     {
       id: 'pdf-placements',
-      label: 'Six photo placements written to the PDF',
-      pass: layout.photos.length === 6,
+      label: `${layout.photoCount} photo placement${
+        layout.photoCount === 1 ? '' : 's'
+      } written to the PDF`,
+      pass: layout.photos.length === layout.photoCount,
     },
   ];
 

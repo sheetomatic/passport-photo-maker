@@ -1,8 +1,8 @@
 # Passport Photo Maker
 
-A complete, browser-only passport photo tool built from the supplied DeepSeek prompt pack.
+A complete, browser-only passport photo tool built from the supplied DeepSeek prompt pack, then reworked around a settings sidebar and a preview-only front.
 
-Upload one portrait — or take one with your phone camera — → on-device enhancement and background cleanup → exact 7:9 crop → true A4 preview → **six identical 35 × 45 mm photos in one horizontal row** → print-ready PDF or direct print.
+Upload one portrait — or take one with your phone camera — → enhance, clean up the background and crop in the sidebar → approve the photo → choose quantity and gaps in print setup → print-ready A4 PDF or direct print.
 
 Everything runs on the device. There is no backend, no account, no analytics, and no photo upload.
 
@@ -41,7 +41,7 @@ Tests use `puppeteer-core`, so install dev dependencies once:
 
 ```bash
 npm install
-npm test          # 41 geometry/crop/PDF/print/upload/PWA tests
+npm test          # 42 geometry/crop/PDF/print/upload/PWA tests
 npm run test:e2e  # real Chrome end-to-end (macOS path auto-detected)
 npm run test:all  # both
 ```
@@ -64,7 +64,7 @@ For local LAN testing, `npm run dev:lan` prints the phone URL (same Wi-Fi; allow
 
 - **Take Photo** uses the phone's native camera through `<input type="file" capture="user">`. That works over plain HTTP and lets the phone switch cameras and confirm/retake in its own camera UI.
 - **Print / Share PDF** uses the Web Share API when available (HTTPS or localhost). Choose **Print** in the share sheet for AirPrint.
-- Over plain HTTP on your LAN, Web Share is unavailable by browser policy. The app then opens the system print dialog directly with the same exact A4 sheet — no PDF detour required.
+- Over plain HTTP on your LAN, Web Share is unavailable by browser policy. The app then opens the system print dialog directly with the same A4 sheet — no PDF detour required.
 
 ![Mobile upload](screenshots/app-mobile-upload.png)
 
@@ -74,14 +74,17 @@ For local LAN testing, `npm run dev:lan` prints the phone URL (same Wi-Fi; allow
 
 ## What it does
 
-- **One photo in, six identical photos out.** Every copy uses the same rendered crop and enhancement.
-- **True A4 portrait geometry**: 210 × 297 mm, one horizontal row, no extra rows or pages.
-- **Two size modes**:
-  - **Exact 35 × 45 mm**: edge-to-edge, zero gaps, zero side margins. This is the mathematically exact six-up layout.
-  - **Printer-safe**: configurable safe margin and gap; the real reduced dimensions are calculated and shown everywhere. It never calls a reduced photo "35 mm".
-- **A4 preview at true proportions** with millimetre measurements, cut guides, and a live metric panel.
-- **Top-aligned row by default** (starts at the paper edge in Exact mode, at the safe margin in Printer-safe). The `Centred` option restores the 126 mm middle position, and a nudge control moves the row down.
-- **Optional cut marks / hairlines / printed labels**; measurement overlays are preview-only.
+- **Sidebar-first editing.** Upload, enhancement, background cleanup and crop all live in a scrollable settings sidebar. The front of the workspace is the A4 preview only.
+- **A deliberate two-step flow.**
+  1. **Photo setup** — adjust the portrait while the sheet updates live.
+  2. **Print setup** — approve the photo, then choose quantity, spacing, vertical position, guides and output.
+- **Adjustable quantity.** Choose **1–24 passport photos** with the `−` / `+` stepper or the 4/6/8/12 shortcuts. The default is six.
+- **Adjustable gap.** Choose **0–8 mm** in 0.5 mm steps with the `−` / `+` stepper or 0/2/4/6 shortcuts. The gap applies horizontally and vertically.
+- **Every photo stays exactly 35 × 45 mm.** Quantity and gaps never shrink or stretch the photo. If the photos no longer fit in one row, the sheet wraps them into balanced, centred rows.
+- **True A4 portrait geometry**: 210 × 297 mm, always one page. Default six photos with no gap is the exact edge-to-edge six-up row.
+- **Top-aligned by default**, with a `Centred` option for the whole photo block.
+- **A4 preview at true proportions** with millimetre measurements, cut guides, and a live metric panel in the sidebar.
+- **Optional cut marks / hairlines / printed size labels**; measurement overlays are preview-only.
 - **Photo Enhancement** using Canvas: auto exposure and grey-world white balance, percentile contrast, warmth, vibrance, multi-scale clarity/sharpening, and a low-strength edge-aware skin-smoothing pass. Original is always preserved; Original/Enhanced comparison, adjustable auto strength, and reset.
 - **Background removal / replacement**: a local MediaPipe selfie segmenter cuts the subject out of the photo and composites it over white, pale blue, light grey, or a custom colour. Edge softness is adjustable, and the original background can be restored instantly. Automatic cutouts are approximate — the UI says to check hair and ears.
 - **Manual 7:9 crop** with drag, wheel/slider zoom, keyboard nudging and reset.
@@ -89,51 +92,68 @@ For local LAN testing, `npm run dev:lan` prints the phone URL (same Wi-Fi; allow
 - **Optional face suggestion** using vendored MediaPipe Tasks Vision + BlazeFace. It fails gracefully to a centred crop; photo editing never depends on it.
 - **PDF download** with jsPDF in millimetres, plus a direct print path that uses an A4, zero-margin print document.
 - **Mobile printing**: Print / Share PDF sends the A4 PDF to the share sheet (AirPrint) on supported phones; without Web Share, the same button opens the browser print dialog with a dedicated exact-size print sheet. Save PDF stays available.
-- **Mobile-friendly layout**: large camera/choose touch targets, safe-area padding for notched phones, touch-specific crop hints, scrollable print dialog on short screens.
+- **Mobile-friendly drawer**: on a phone the preview fills the screen and a floating **Adjust photo / Print settings** button opens the settings panel; all controls remain reachable with large touch targets and safe-area padding.
 - **Installable PWA**: web app manifest with any/maskable icons, standalone display, a service worker for the offline app shell, and an in-app install flow with iPhone/Android instructions.
 - **Privacy**: photos are decoded and processed in memory with Canvas. No network request leaves the page; even the face-detection model and WASM are vendored locally.
 
 ## The physical geometry
 
-Six photos at exactly 35 mm = 210 mm, which is the full width of A4. There is no room for gaps, margins, or rounding.
+Every photo is exactly 35 × 45 mm. Quantity and gap only change how many photos fit per row and how the block is arranged.
 
-### Exact 35 × 45 mm
-
-```
-page      = 210 × 297 mm (portrait)
-photos    = 6 × 35 × 45 mm
-row width = 6 × 35 = 210 mm
-gaps      = 0 mm
-margins   = 0 mm
-row top   = 0 mm   (top-aligned by default)
-row top   = 126 mm (optional Centred position)
-```
-
-The row starts at the top edge by default. `Centred` is still available as a one-click alternative, and the nudge slider moves the row down from whichever base you choose. Edge-to-edge printing requires a borderless printer; most office printers have non-printable margins and may clip the outer photos, so the UI warns and offers Printer-safe.
-
-### Printer-safe
-
-With safe margin `m` and gap `g`:
+For `N` photos, gap `g`, and A4 width 210 mm:
 
 ```
-photo width  = (210 - 2m - 5g) / 6
-photo height = photo width × 45 / 35   (exact 7:9)
-row width    = 6 × width + 5g
-row x        = margin = m
-row top      = margin = m   (Top position; Centred is (297 - height) / 2)
+max columns = floor((210 + g) / (35 + g))
+rows        = ceil(N / maxColumns)
+columns     = ceil(N / rows)
+block width = columns × 35 + (columns − 1) × g
+block height= rows × 45 + (rows − 1) × g
+block x     = (210 − block width) / 2
+block y     = 0 (Top) or (297 − block height) / 2 (Centred)
 ```
 
-Defaults `m = 6 mm`, `g = 2 mm` produce:
+Rows with fewer photos are centred inside the block. The photo block is inside the A4 page for every supported value.
+
+### Default: six photos, no gap
 
 ```
-photo width  = 31.333… mm
-photo height = 40.2857… mm
-row width    = 198 mm
-side margin  = 6 mm
-row top      = 6 mm
+page        = 210 × 297 mm (portrait)
+photos      = 6 × 35 × 45 mm
+columns     = 6
+rows        = 1
+block       = 210 × 45 mm at x = 0, y = 0
+gaps        = 0 mm
+side margin = 0 mm
 ```
 
-These are the numbers shown in the UI, in the PDF, and in the print document. The app explicitly says **"reduced from 35 mm"** and never claims the reduced photos are 35 mm wide. If both safe margin and gap are set to zero, the photos are again exactly 35 × 45 mm, and the UI says "full 35 mm width" instead of pretending something was reduced.
+This is the exact edge-to-edge six-up row. It needs a borderless printer for the outer edges.
+
+### Eight photos, 2 mm gap
+
+```
+columns     = 4
+rows        = 2
+block       = 146 × 92 mm
+block x     = 32 mm
+block y     = 0 mm (Top)
+photo gap   = 2 mm horizontally and vertically
+```
+
+### Six photos, 2 mm gap
+
+Six 35 mm photos plus five 2 mm gaps would need 220 mm, more than A4's 210 mm, so the app wraps them into a balanced 3 × 2 grid (109 × 92 mm). Photos remain exactly 35 × 45 mm.
+
+### Twenty-four photos, 8 mm gap
+
+```
+columns     = 5
+rows        = 5
+block       = 207 × 257 mm
+block x     = 1.5 mm
+block y     = 0 mm (Top)
+```
+
+Still one A4 page.
 
 ### Pixel dimensions
 
@@ -142,20 +162,20 @@ Rendered crop width is always a multiple of 7, so the pixel height is an exact i
 | Photo width | 600 dpi render | Effective dpi |
 | --- | --- | --- |
 | 35 mm | 826 × 1062 px | ≈599 dpi |
-| 31.33 mm | 742 × 954 px | ≈602 dpi |
+| 35 mm at 300 dpi | 413 × 531 px | ≈300 dpi |
 
 The source crop and target canvas are both 7:9, so images are never stretched.
 
 ## Workflow
 
-1. **Upload** — take a photo with the phone camera, choose from the library, or drag/drop; JPG, PNG, WEBP (and HEIC where supported) up to 40 MB. Type and decode failures show a clear error without breaking the current session.
+1. **Photo setup (sidebar)** — take a photo with the phone camera, choose from the library, or drag/drop; JPG, PNG, WEBP (and HEIC where supported) up to 40 MB. Type and decode failures show a clear error without breaking the current session.
 2. **Enhance** — Original/Enhanced toggle, auto strength, brightness, contrast, warmth, sharpness and skin smoothing. The original is untouched.
 3. **Background** — switch removal on, pick White/Blue/Grey/Custom, adjust edge softness, or return to Original. The cutout runs locally with the bundled selfie segmenter.
 4. **Crop** — locked 7:9 frame; drag to pan, scroll/slider/± to zoom, arrow keys to nudge, Reset Crop. A face is suggested automatically when the local detector loads.
-5. **Layout** — Exact or Printer-safe, safe margin, gap, row position (Top default / Centred), nudge, cut guides, print quality (300/600 dpi), printed labels, measurements.
-6. **Preview** — live A4 sheet with six copies and measurement overlay; Generate Preview renders the full-resolution print image and verifies every geometry check.
+5. **Looks good → print setup** — approve the portrait and move to the print stage. The A4 preview remains the only thing on the front.
+6. **Print setup (sidebar)** — passport size is shown as fixed **35 × 45 mm**; adjust quantity, gap, vertical position, cut guides, print quality, printed labels and measurements. The preview updates live.
 7. **Export** — Download PDF (one page) or Print. On mobile, Print / Share PDF uses the share sheet when available and falls back to the system print dialog; desktop uses the browser's print dialog with the A4 sheet.
-8. **Replace / Retake / Remove** — replacing re-renders all six; removing returns to the empty state.
+8. **Back to photo / Replace / Retake / Remove** — returning preserves the print layout; replacing re-renders every copy; removing resets the layout and returns to the empty preview.
 
 ## Print instructions
 
@@ -172,21 +192,21 @@ On a phone:
 - **Share unavailable** (plain HTTP): tap **Print / Share PDF** and the browser print dialog opens directly. The temporary print sheet is exactly A4 with the same millimetre layout; it is scoped so normal printing of the app is unaffected.
 - **Save PDF** is always available in the mobile print dialog.
 
-Exact mode must be printed borderless. If the printer cannot do that, use Printer-safe. The PDF and print document both carry the same millimetre coordinates; the preview uses the same `computeLayout()` result.
+If the photo block reaches the paper edge (the default six-up row does), use borderless printing or trim the sheet. With a gap and/or fewer than six photos, the block has side margins and prints comfortably within a normal printer's printable area. The PDF and print document both carry the same millimetre coordinates; the preview uses the same `computeLayout()` result.
 
 ## Project structure
 
 ```
 passport-photo-maker/
-├─ index.html                  # app shell
-├─ styles.css                  # visual system, responsive layout, A4 sheet
+├─ index.html                  # sidebar + preview-only workspace shell
+├─ styles.css                  # visual system, responsive drawer, A4 sheet
 ├─ js/
-│  ├─ geometry.js              # A4 maths, modes, guides, verification (source of truth)
+│  ├─ geometry.js              # A4 grid maths, guides, verification (source of truth)
 │  ├─ image-processing.js      # decode, tone analysis, skin smoothing, background compositing, crop rendering
 │  ├─ background.js            # lazy local selfie segmentation for cutouts
 │  ├─ crop.js                  # 7:9 crop model, clamping, face framing
 │  ├─ face-detect.js           # lazy local MediaPipe loader
-│  ├─ app.js                   # state, UI wiring, preview, export
+│  ├─ app.js                   # state, staged sidebar, preview, export
 │  ├─ pdf.js                   # jsPDF page and millimetre placements
 │  └─ print.js                 # exact print document + iframe printing
 ├─ vendor/
@@ -198,7 +218,7 @@ passport-photo-maker/
 ├─ js/pwa.js                   # service worker registration + install UI
 ├─ .nojekyll                   # GitHub Pages: serve files as-is
 ├─ tests/
-│  ├─ unit/                    # geometry, crop, PDF, print tests
+│  ├─ unit/                    # geometry, crop, PDF, print, upload, PWA tests
 │  ├─ e2e.mjs                  # real-browser acceptance run
 │  └─ fixtures/                # generated synthetic test portraits
 ├─ screenshots/                # app and print-sheet captures from the test run
@@ -210,35 +230,37 @@ passport-photo-maker/
 
 Run `npm test`:
 
-- 6 photos × 35 mm = 210 mm, zero gaps/side margins, row top 0 mm (default); Centred = 126 mm; nudge and clamping verified.
-- Printer-safe `(210 − 2m − 5g) / 6` and 7:9 ratio at every zoom.
-- Pixel outputs have an exact 7:9 ratio.
-- PDF `MediaBox` = 595.2756 × 841.8898 pt = 210 × 297 mm; exactly one page; six image draw operations at 35 × 45 mm, evenly spaced, top edge at 0 mm (252 mm from the PDF's bottom-left origin).
-- Print CSS uses `@page { size: 210mm 297mm; margin: 0 }`; six images at exact millimetre positions; no body titles.
-- Safe mode never claims 35 mm; labels are opt-in.
+- Default layout: six photos, 35 × 45 mm, one row, 210 mm wide, gap 0, top 0 mm.
+- Quantity/gap layout: 8 photos at 2 mm → 4 × 2, 146 × 92 mm, block x 32 mm; 6 at 2 mm wraps to 3 × 2; 24 at 8 mm fits as 5 × 5 in 207 × 257 mm.
+- Quantity clamps to 1–24, gap clamps to 0–8 mm; Top/Centred placement stays inside the page.
+- Pixel outputs have an exact 7:9 ratio (826 × 1062 at 600 dpi; 413 × 531 at 300 dpi).
+- Cut marks trace every photo; hairlines cover every photo edge.
+- PDF `MediaBox` = 595.2756 × 841.8898 pt = 210 × 297 mm; exactly one page; all selected photos at 35 × 45 mm with the requested gaps; multi-row positions checked.
+- Print CSS uses `@page { size: 210mm 297mm; margin: 0 }`; all selected images at exact millimetre positions; no body titles.
+- Printed labels are opt-in and render as one block caption, not one overlapping label per photo.
 - Camera-style uploads without an extension, HEIC acceptance, format rejection, empty/oversized files.
 - PWA manifest fields, icon dimensions/purposes, screenshots, service-worker precache and navigation fallback, and the install/theme metadata.
 - Enhancement reset returns to the new defaults (auto strength, contrast, sharpness, smoothing, warmth).
 
 Run `npm run test:e2e` (real Chrome, headless):
 
-- Empty state and disabled actions; corrupt, unsupported and unreadable HEIC files rejected.
-- Upload → live preview with six identical images; sheet photo positions measured in the browser: 35 × 45 mm at 0, 35, 70 … 175 mm, top 0 mm.
-- Printer-safe top margin, Top/Centred placement, and downward nudging.
-- Printer-safe: 31.33 × 40.29 mm, 6 mm margins, 2 mm gaps; zero-margin case reports "full 35 mm width".
-- Measurements, guides, preview labels, and row position.
+- Empty preview and disabled actions; desktop sidebar visible; corrupt, unsupported and unreadable HEIC files rejected.
+- Upload → live preview with six identical images; default photo positions measured in the browser: 35 × 45 mm at 0, 35, 70 … 175 mm, top 0 mm.
+- Approval gate moves the sidebar to Print setup; Back returns to Photo setup.
+- Quantity/gap controls: eight photos at 2 mm → 4 × 2, 146 × 92 mm block; all eight on the sheet with exact 35 × 45 mm dimensions and 2 mm gaps.
+- Top/Centred placement, measurements, guides (none / hairlines / cut marks) and single printed label.
 - Zoom/drag/reset, Original/Enhanced, adjustment reset.
 - Generate Preview → all geometry checks pass.
-- PDF bytes and **actual downloaded file**: one A4 portrait page.
-- Print stylesheet measured in a browser and printed to PDF: one page, correct page size.
+- PDF bytes and **actual downloaded file**: one A4 portrait page with eight photo draw operations.
+- Print stylesheet measured in a browser and printed to PDF: one page, correct page size, all eight photos positioned exactly.
 - Desktop print dialog and instructions.
-- Replace photo updates all six copies; remove returns to the empty state.
-- **Mobile emulation** (iPhone UA, touch, 390 × 844): Take Photo/Choose Photo visible, `capture="user"` camera input path loads the photo, Retake visible, no horizontal overflow.
+- Replace photo updates all eight copies; remove returns to the empty state.
+- **Mobile emulation** (iPhone UA, touch, 390 × 844): preview-only front, off-canvas drawer, Adjust/Upload button, Take Photo/Choose Photo in the drawer, `capture="user"` path loads the photo, Retake visible, no horizontal overflow.
 - **Mobile share path**: stubbed Web Share receives a real `application/pdf` File of the print sheet.
 - **Background removal**: white and pale-blue cutouts measured at the sheet corners, Original restored on toggle, and the full-resolution export canvas checked for a white background.
 - **Mobile print fallback**: with sharing disabled, the direct print portal opens with six 35 × 45 mm photos, measured in print media, and produces exactly one A4 page.
-- **Live GitHub Pages deploy**: installability errors empty, service worker controlling the page, six photos and face detection working on the deployed HTTPS origin, and an offline reload rendering the app shell.
-- Face detection blocked at the network layer → warning status, six-photo manual flow still works.
+- **Live GitHub Pages deploy**: installability errors empty, service worker controlling the page, passport photos and face detection working on the deployed HTTPS origin, and an offline reload rendering the app shell.
+- Face detection blocked at the network layer → warning status, manual six-photo flow still works.
 - **PWA installability** via Chrome's `Page.getInstallabilityErrors`: no errors; standalone manifest, three icons and a service worker.
 - **Offline launch**: after service-worker activation, a reload with networking disabled still renders the app shell.
 - **No external network requests** during the whole run.
@@ -257,9 +279,9 @@ Redeploy after changes:
 git add . && git commit -m "Update app" && git push
 ```
 
-The shell is versioned twice for safe upgrades: `styles.css?v=3`, the module
+The shell is versioned twice for safe upgrades: `styles.css?v=4`, the module
 import map and `sw.js` cache version. When changing shell assets, bump all three
-(`v=3` in `index.html`, the import map and `CACHE_VERSION` in `sw.js`). The
+(`v=4` in `index.html`, the import map and `CACHE_VERSION` in `sw.js`). The
 service worker is network-first for HTML/CSS/JS and precaches with `cache:
 'reload'`, so a deployment cannot mix new HTML with an old stylesheet.
 
@@ -280,8 +302,8 @@ or reload the page once; the versioned asset URLs bypass the old cache.
 
 - This is a print-sheet tool, **not an official compliance guarantee**. Passport rules vary by country; check requirements (head size, background, expression, recency) before submitting.
 - Automatic background cutouts are approximate around fine hair and thin straps. Inspect the preview at full size, or keep the original background, when edges matter.
-- The layout is intentionally fixed to six identical photos in one row on A4 portrait.
-- Exact mode depends on borderless printer hardware.
+- Photos are always exactly 35 × 45 mm. The sheet supports 1–24 photos and 0–8 mm gaps; larger quantities or gaps are intentionally out of scope.
+- A block that reaches the paper edge (notably the default six-up row) depends on borderless printer hardware. Use a gap or fewer photos to create printable margins.
 - Very large images are downscaled to 3200 px on the long edge before processing, which is far above the 826 px print requirement.
 - The mobile direct-print path relies on the browser's print implementation; the PDF path is the exact, portable fallback.
 - AirPrint/share availability depends on the browser and context, not the app.

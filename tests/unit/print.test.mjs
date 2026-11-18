@@ -29,7 +29,7 @@ function parsePhotos(html) {
 
 test('print document is exactly A4 portrait with zero page margin', () => {
   const html = buildPrintDocument({
-    layout: computeLayout({ mode: 'exact' }),
+    layout: computeLayout(),
     imageDataUrl: IMAGE,
     guides: 'cutmarks',
   });
@@ -41,7 +41,7 @@ test('print document is exactly A4 portrait with zero page margin', () => {
 
 test('print photos are positioned in millimetres at 35 x 45 mm', () => {
   const html = buildPrintDocument({
-    layout: computeLayout({ mode: 'exact' }),
+    layout: computeLayout(),
     imageDataUrl: IMAGE,
     guides: 'none',
   });
@@ -55,42 +55,48 @@ test('print photos are positioned in millimetres at 35 x 45 mm', () => {
   });
 });
 
-test('printer-safe print document uses calculated millimetres throughout', () => {
-  const layout = computeLayout({ mode: 'safe', safeMarginMm: 6, gapMm: 2 });
+test('print document supports a quantity/gap grid at exact photo size', () => {
+  const layout = computeLayout({ photoCount: 8, gapMm: 2 });
   const html = buildPrintDocument({ layout, imageDataUrl: IMAGE, guides: 'none' });
   const photos = parsePhotos(html);
-  close(photos[0].x, 6, 0.01);
-  close(photos[0].y, 6, 0.01);
-  close(photos[0].width, 188 / 6, 0.01);
-  close(photos[0].height, (188 / 6) * (45 / 35), 0.01);
+  assert.equal(photos.length, 8);
+  photos.forEach((photo, index) => {
+    const expected = layout.photos[index];
+    close(photo.x, expected.x, 0.01);
+    close(photo.y, expected.y, 0.01);
+    close(photo.width, 35, 0.01);
+    close(photo.height, 45, 0.01);
+  });
   close(photos[1].x - (photos[0].x + photos[0].width), 2, 0.01);
-  close(photos[5].x + photos[5].width, 204, 0.01);
 });
 
-test('cut guides are vector SVG lines outside the image area', () => {
-  const layout = computeLayout({ mode: 'exact' });
+test('cut guides are vector SVG lines tracing each photo', () => {
+  const layout = computeLayout();
   const html = buildPrintDocument({ layout, imageDataUrl: IMAGE, guides: 'cutmarks' });
-  assert.equal((html.match(/<line /g) || []).length, 7);
+  assert.equal((html.match(/<line /g) || []).length, layout.photoCount * 8);
   assert.match(html, /viewBox="0 0 210 297"/);
   assert.match(html, /stroke-width: 0.15;/);
+
+  const hairlines = buildPrintDocument({ layout, imageDataUrl: IMAGE, guides: 'hairline' });
+  assert.equal((hairlines.match(/<line /g) || []).length, layout.photoCount * 4);
 
   const none = buildPrintDocument({ layout, imageDataUrl: IMAGE, guides: 'none' });
   assert.equal((none.match(/<line /g) || []).length, 0);
 });
 
-test('size labels are opt-in and measured in millimetres', () => {
-  const layout = computeLayout({ mode: 'exact' });
+test('size labels are an opt-in single block caption', () => {
+  const layout = computeLayout({ photoCount: 8, gapMm: 2 });
   const off = buildPrintDocument({ layout, imageDataUrl: IMAGE, printedLabels: false });
   assert.equal((off.match(/class="label"/g) || []).length, 0);
 
   const on = buildPrintDocument({ layout, imageDataUrl: IMAGE, printedLabels: true });
-  assert.equal((on.match(/class="label"/g) || []).length, 6);
-  assert.equal((on.match(/35\.00 × 45\.00 mm/g) || []).length, 6);
+  assert.equal((on.match(/class="label"/g) || []).length, 1);
+  assert.match(on, /8 × 35\.00 × 45\.00 mm · 2\.0 mm gaps/);
 });
 
 test('print document contains no titles, logos or instructions on the sheet', () => {
   const html = buildPrintDocument({
-    layout: computeLayout({ mode: 'exact' }),
+    layout: computeLayout(),
     imageDataUrl: IMAGE,
   });
   const body = html.slice(html.indexOf('<body>'));

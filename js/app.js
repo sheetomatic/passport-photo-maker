@@ -11,7 +11,6 @@ import {
   pixelSizeForPhoto,
   layoutKey,
   mm,
-  MODES,
   LIMITS,
   buildGuideSegments,
 } from '#app/geometry';
@@ -43,7 +42,21 @@ const PREVIEW_EDITOR_SIDE = 1200;
 const $ = (id) => document.getElementById(id);
 
 const els = {
-  stepper: $('stepper'),
+  sidebar: $('sidebar'),
+  sidebarBackdrop: $('sidebarBackdrop'),
+  btnOpenSidebar: $('btnOpenSidebar'),
+  btnCloseSidebar: $('btnCloseSidebar'),
+  sidebarToggleLabel: $('sidebarToggleLabel'),
+  sidebarStageTitle: $('sidebarStageTitle'),
+  stagePhoto: $('stagePhoto'),
+  stagePrint: $('stagePrint'),
+  stageRailPhoto: $('stageRailPhoto'),
+  stageRailPrint: $('stageRailPrint'),
+  btnToPrint: $('btnToPrint'),
+  btnBackToPhoto: $('btnBackToPhoto'),
+  previewStageLabel: $('previewStageLabel'),
+  sheetEmpty: $('sheetEmpty'),
+
   uploadCard: $('uploadCard'),
   dropzone: $('dropzone'),
   fileInput: $('fileInput'),
@@ -102,18 +115,15 @@ const els = {
   btnResetCrop: $('btnResetCrop'),
   btnDetectFace: $('btnDetectFace'),
 
-  modeExact: $('modeExact'),
-  modeSafe: $('modeSafe'),
   posTop: $('posTop'),
   posCentre: $('posCentre'),
-  modeNote: $('modeNote'),
-  safeOptions: $('safeOptions'),
-  safeMargin: $('safeMargin'),
-  safeMarginValue: $('safeMarginValue'),
-  gap: $('gap'),
+  countMinus: $('countMinus'),
+  countPlus: $('countPlus'),
+  countValue: $('countValue'),
+  gapMinus: $('gapMinus'),
+  gapPlus: $('gapPlus'),
   gapValue: $('gapValue'),
-  vertical: $('vertical'),
-  verticalValue: $('verticalValue'),
+  layoutSummary: $('layoutSummary'),
   actualSize: $('actualSize'),
   guidesSelect: $('guidesSelect'),
   dpiSelect: $('dpiSelect'),
@@ -124,7 +134,6 @@ const els = {
   printReadyBadge: $('printReadyBadge'),
   geometryChecks: $('geometryChecks'),
   exportNote: $('exportNote'),
-  btnGenerateCard: $('btnGenerateCard'),
 
   sheet: $('sheet'),
   sheetPhotos: $('sheetPhotos'),
@@ -162,8 +171,7 @@ const state = {
   background: { enabled: false, color: '#ffffff', feather: 20 },
   backgroundTimer: 0,
   layout: {
-    mode: MODES.EXACT,
-    safeMarginMm: LIMITS.safeMarginMm.default,
+    photoCount: LIMITS.photoCount.default,
     gapMm: LIMITS.gapMm.default,
     verticalPlacement: 'top',
     verticalOffsetMm: 0,
@@ -172,7 +180,7 @@ const state = {
   printedLabels: false,
   showMeasurements: true,
   dpi: 600,
-  step: 1,
+  stage: 'photo',
   cropTouched: false,
   faceBusy: false,
   busy: false,
@@ -295,13 +303,30 @@ function bindEvents() {
   els.btnResetCrop.addEventListener('click', resetCrop);
   els.btnDetectFace.addEventListener('click', () => runFaceDetection({ manual: true }));
 
-  els.modeExact.addEventListener('click', () => setMode(MODES.EXACT));
-  els.modeSafe.addEventListener('click', () => setMode(MODES.SAFE));
   els.posTop.addEventListener('click', () => setPlacement('top'));
   els.posCentre.addEventListener('click', () => setPlacement('centre'));
-  els.safeMargin.addEventListener('input', onLayoutInput);
-  els.gap.addEventListener('input', onLayoutInput);
-  els.vertical.addEventListener('input', onLayoutInput);
+
+  els.countMinus.addEventListener('click', () => changePhotoCount(-1));
+  els.countPlus.addEventListener('click', () => changePhotoCount(1));
+  els.gapMinus.addEventListener('click', () => changeGap(-LIMITS.gapMm.step));
+  els.gapPlus.addEventListener('click', () => changeGap(LIMITS.gapMm.step));
+  for (const button of document.querySelectorAll('[data-count]')) {
+    button.addEventListener('click', () => setPhotoCount(Number(button.dataset.count)));
+  }
+  for (const button of document.querySelectorAll('[data-gap]')) {
+    button.addEventListener('click', () => setGap(Number(button.dataset.gap)));
+  }
+
+  els.btnToPrint.addEventListener('click', () => setStage('print'));
+  els.btnBackToPhoto.addEventListener('click', () => setStage('photo'));
+  els.btnOpenSidebar.addEventListener('click', () => setSidebarOpen(true));
+  els.btnCloseSidebar.addEventListener('click', () => setSidebarOpen(false));
+  els.sidebarBackdrop.addEventListener('click', () => setSidebarOpen(false));
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && document.body.classList.contains('sidebar-open')) {
+      setSidebarOpen(false);
+    }
+  });
   els.guidesSelect.addEventListener('change', () => {
     state.guides = els.guidesSelect.value;
     refreshLayout();
@@ -321,7 +346,6 @@ function bindEvents() {
   });
 
   els.btnGenerate.addEventListener('click', () => generatePreview(els.btnGenerate));
-  els.btnGenerateCard.addEventListener('click', () => generatePreview(els.btnGenerateCard));
   els.btnDownload.addEventListener('click', downloadPdf);
   els.btnPrint.addEventListener('click', openPrintDialog);
 
@@ -353,6 +377,52 @@ function bindEvents() {
 function openCamera() {
   if (state.busy) return;
   els.cameraInput.click();
+}
+
+function setSidebarOpen(open) {
+  document.body.classList.toggle('sidebar-open', open);
+  els.btnOpenSidebar.setAttribute('aria-expanded', String(open));
+  if (open) {
+    window.requestAnimationFrame(() => els.btnCloseSidebar.focus());
+  } else {
+    els.btnOpenSidebar.focus({ preventScroll: true });
+  }
+}
+
+function setStage(stage) {
+  if (stage === 'print' && !state.photo) return;
+  state.stage = stage === 'print' ? 'print' : 'photo';
+  updateStepper();
+  const scroll = els.sidebar.querySelector('.sidebar-scroll');
+  scroll?.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function setPhotoCount(value) {
+  const next = Math.round(
+    Math.min(LIMITS.photoCount.max, Math.max(LIMITS.photoCount.min, value)),
+  );
+  if (next === state.layout.photoCount) return;
+  state.layout = { ...state.layout, photoCount: next };
+  syncLayoutInputs();
+  refreshLayout();
+}
+
+function changePhotoCount(delta) {
+  setPhotoCount(state.layout.photoCount + delta);
+}
+
+function setGap(value) {
+  const step = LIMITS.gapMm.step;
+  const rounded = Math.round(value / step) * step;
+  const next = Math.min(LIMITS.gapMm.max, Math.max(LIMITS.gapMm.min, rounded));
+  if (Math.abs(next - state.layout.gapMm) < 1e-9) return;
+  state.layout = { ...state.layout, gapMm: next };
+  syncLayoutInputs();
+  refreshLayout();
+}
+
+function changeGap(delta) {
+  setGap(state.layout.gapMm + delta);
 }
 
 function onDragOver(event) {
@@ -437,10 +507,8 @@ function startSession(photo) {
   window.clearTimeout(state.sheetTimer);
   window.clearTimeout(state.editorTimer);
 
-  els.uploadCard.hidden = true;
-  els.workspace.hidden = false;
   document.body.classList.add('has-photo');
-  state.step = 2;
+  state.stage = 'photo';
   els.photoThumb.alt = `Uploaded photo: ${photo.name}`;
   els.cropImage.alt = `Crop preview of ${photo.name}`;
   updatePhotoCard();
@@ -466,8 +534,7 @@ function startSession(photo) {
   window.requestAnimationFrame(() => {
     scheduleEditorEnhance(0);
     runFaceDetection({ manual: false });
-    const top = els.workspace.getBoundingClientRect().top + window.scrollY - 76;
-    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    els.sidebar.querySelector('.sidebar-scroll')?.scrollTo({ top: 0, behavior: 'smooth' });
   });
 }
 
@@ -515,13 +582,12 @@ function removePhoto() {
   state.editorOriginalUrl = null;
   state.editorEnhancedUrl = null;
   state.enhancedSettingsKey = null;
-  state.step = 1;
+  state.stage = 'photo';
   state.enhance = { enabled: true, ...DEFAULT_ENHANCE_SETTINGS };
   state.background = { enabled: false, color: '#ffffff', feather: 20 };
   window.clearTimeout(state.backgroundTimer);
   state.layout = {
-    mode: MODES.EXACT,
-    safeMarginMm: LIMITS.safeMarginMm.default,
+    photoCount: LIMITS.photoCount.default,
     gapMm: LIMITS.gapMm.default,
     verticalPlacement: 'top',
     verticalOffsetMm: 0,
@@ -541,6 +607,7 @@ function removePhoto() {
   els.sheetPhotos.replaceChildren();
   els.sheetGuides.replaceChildren();
   els.measureOverlay.replaceChildren();
+  els.printLabels.replaceChildren();
   els.printReadyBadge.textContent = 'Not generated';
   clearError();
   syncEnhanceInputs();
@@ -1014,69 +1081,50 @@ async function runFaceDetection({ manual = false } = {}) {
 /* Layout                                                             */
 /* ------------------------------------------------------------------ */
 
-function setMode(mode) {
-  state.layout = { ...state.layout, mode };
-  els.modeExact.setAttribute('aria-pressed', String(mode === MODES.EXACT));
-  els.modeSafe.setAttribute('aria-pressed', String(mode === MODES.SAFE));
-  els.modeExact.classList.toggle('is-selected', mode === MODES.EXACT);
-  els.modeSafe.classList.toggle('is-selected', mode === MODES.SAFE);
-  refreshLayout();
-  if (!state.photo) return;
-  toast(
-    mode === MODES.EXACT
-      ? 'Exact size: 35 × 45 mm, edge-to-edge. Use a borderless printer.'
-      : 'Printer-safe: photos are reduced to fit printable margins.',
-    'success',
-    4200,
-  );
-}
-
-function onLayoutInput() {
-  state.layout = {
-    ...state.layout,
-    safeMarginMm: Number(els.safeMargin.value),
-    gapMm: Number(els.gap.value),
-    verticalOffsetMm: Number(els.vertical.value),
-  };
-  refreshLayout();
-}
-
 function setPlacement(placement) {
   if (!['top', 'centre'].includes(placement)) return;
-  const changed = state.layout.verticalPlacement !== placement;
   state.layout = {
     ...state.layout,
     verticalPlacement: placement,
-    // Switching base position starts fresh; the nudge is a fine-tune, not a
-    // hidden offset that follows the user between Top and Centred.
-    ...(changed ? { verticalOffsetMm: 0 } : {}),
+    verticalOffsetMm: 0,
   };
-  if (changed) els.vertical.value = '0';
   syncPlacementButtons();
   refreshLayout();
 }
 
+function arrangementLabel(layout) {
+  if (layout.photoCount === 1) return 'one photo';
+  if (layout.rows === 1) return 'one row';
+  return `${layout.columns} across × ${layout.rows} down`;
+}
+
 function syncLayoutInputs() {
-  els.safeMargin.value = String(state.layout.safeMarginMm);
-  els.gap.value = String(state.layout.gapMm);
-  els.vertical.value = String(state.layout.verticalOffsetMm);
+  const layout = computeLayout(state.layout);
+  els.countValue.textContent = String(layout.photoCount);
+  els.gapValue.textContent = `${layout.gapMm.toFixed(1)} mm`;
+  els.countMinus.disabled = layout.photoCount <= LIMITS.photoCount.min;
+  els.countPlus.disabled = layout.photoCount >= LIMITS.photoCount.max;
+  els.gapMinus.disabled = layout.gapMm <= LIMITS.gapMm.min;
+  els.gapPlus.disabled = layout.gapMm >= LIMITS.gapMm.max;
+
+  for (const button of document.querySelectorAll('[data-count]')) {
+    button.classList.toggle(
+      'is-selected',
+      Number(button.dataset.count) === layout.photoCount,
+    );
+  }
+  for (const button of document.querySelectorAll('[data-gap]')) {
+    button.classList.toggle(
+      'is-selected',
+      Math.abs(Number(button.dataset.gap) - layout.gapMm) < 1e-9,
+    );
+  }
+
   els.guidesSelect.value = state.guides;
   syncPlacementButtons();
   els.dpiSelect.value = String(state.dpi);
   els.printedLabels.checked = state.printedLabels;
   els.showMeasurements.checked = state.showMeasurements;
-  els.modeExact.setAttribute('aria-pressed', String(state.layout.mode === MODES.EXACT));
-  els.modeSafe.setAttribute('aria-pressed', String(state.layout.mode === MODES.SAFE));
-  els.modeExact.classList.toggle('is-selected', state.layout.mode === MODES.EXACT);
-  els.modeSafe.classList.toggle('is-selected', state.layout.mode === MODES.SAFE);
-}
-
-function syncPlacementButtons() {
-  const placement = state.layout.verticalPlacement === 'centre' ? 'centre' : 'top';
-  els.posTop.setAttribute('aria-pressed', String(placement === 'top'));
-  els.posCentre.setAttribute('aria-pressed', String(placement === 'centre'));
-  els.posTop.classList.toggle('is-selected', placement === 'top');
-  els.posCentre.classList.toggle('is-selected', placement === 'centre');
 }
 
 function refreshLayout() {
@@ -1094,49 +1142,49 @@ function refreshLayout() {
 
 function updateLayoutUI() {
   const layout = computeLayout(state.layout);
-  const exact = layout.mode === MODES.EXACT;
-  els.safeOptions.hidden = exact;
-  els.safeMarginValue.textContent = `${state.layout.safeMarginMm.toFixed(1)} mm`;
-  els.gapValue.textContent = `${state.layout.gapMm.toFixed(2)} mm`;
-  els.verticalValue.textContent =
-    layout.nudgeMm < 0.5 ? 'None' : `${layout.nudgeMm.toFixed(0)} mm`;
+  syncLayoutInputs();
 
-  els.modeNote.textContent = exact
-    ? 'Edge-to-edge: six 35 mm photos fill the full 210 mm width. Borderless printing required.'
-    : layout.isReduced
-      ? `Fits inside a ${layout.sideMarginMm.toFixed(1)} mm safe margin. Photos become ${layout.photoWidthMm.toFixed(
+  const countLabel = `${layout.photoCount} × ${layout.photoWidthMm.toFixed(
+    2,
+  )} × ${layout.photoHeightMm.toFixed(2)} mm`;
+  els.actualSize.textContent = countLabel;
+  els.layoutSummary.textContent = `${layout.photoCount} photo${
+    layout.photoCount === 1 ? '' : 's'
+  } · ${arrangementLabel(layout)} · ${layout.gapMm.toFixed(1)} mm gaps`;
+
+  const edgeToEdge = layout.blockWidth >= 210 - 1e-6;
+  els.printerWarning.textContent = edgeToEdge
+    ? 'These photos span the full A4 width. Print borderless for edge-to-edge output.'
+    : layout.rows > 1
+      ? `Photos stay exactly 35 × 45 mm. The sheet uses ${layout.blockX.toFixed(
           2,
-        )} × ${layout.photoHeightMm.toFixed(2)} mm — not 35 mm wide.`
-      : 'Zero margin and zero gap: these photos are exactly 35 × 45 mm, so a borderless printer is still required.';
-
-  els.actualSize.textContent = exact
-    ? '6 × 35.00 × 45.00 mm (edge-to-edge)'
-    : `6 × ${layout.photoWidthMm.toFixed(2)} × ${layout.photoHeightMm.toFixed(2)} mm ${
-        layout.isReduced ? '(reduced from 35 mm)' : '(full 35 mm width)'
-      }`;
-
-  els.printerWarning.textContent = exact
-    ? 'Most home printers cannot print to the paper edge. If yours clips the outer photos, switch to Printer-safe.'
-    : layout.isReduced
-      ? `Printer-safe mode gives up exact 35 mm width on purpose: ${layout.photoWidthMm.toFixed(
+        )} mm side margins and ${layout.rows} rows — print at 100% / actual size.`
+      : `Photos stay exactly 35 × 45 mm. Side margins are ${layout.blockX.toFixed(
           2,
-        )} mm photos plus ${layout.gapMm.toFixed(2)} mm gaps fit inside ${layout.sideMarginMm.toFixed(
-          1,
-        )} mm printable margins. The sheet is still A4 portrait.`
-      : 'Zero margin and zero gap produce exact 35 × 45 mm photos, but the outer photos still sit on the paper edge. Only a borderless printer can reproduce this safely.';
+        )} mm — print at 100% / actual size.`;
 
-  els.guidesSelect.value = state.guides;
   els.printedLabels.checked = state.printedLabels;
   els.showMeasurements.checked = state.showMeasurements;
-  syncPlacementButtons();
+  els.guidesSelect.value = state.guides;
   els.measureOverlay.hidden = !state.showMeasurements;
+  els.modeBadge.textContent = `${layout.photoCount} photo${
+    layout.photoCount === 1 ? '' : 's'
+  }`;
+  if (!state.photo) {
+    els.previewSub.textContent = '210 × 297 mm portrait';
+  }
 
   updateActionSummary(layout);
+  updateStepper();
 }
 
-/* ------------------------------------------------------------------ */
-/* Sheet preview                                                      */
-/* ------------------------------------------------------------------ */
+function syncPlacementButtons() {
+  const placement = state.layout.verticalPlacement === 'centre' ? 'centre' : 'top';
+  els.posTop.setAttribute('aria-pressed', String(placement === 'top'));
+  els.posCentre.setAttribute('aria-pressed', String(placement === 'centre'));
+  els.posTop.classList.toggle('is-selected', placement === 'top');
+  els.posCentre.classList.toggle('is-selected', placement === 'centre');
+}
 
 function scheduleSheet(delay = 180) {
   window.clearTimeout(state.sheetTimer);
@@ -1167,7 +1215,7 @@ function renderSheet(dataUrl, layout = computeLayout(state.layout)) {
     const image = document.createElement('img');
     image.className = 'sheet-photo';
     image.src = dataUrl;
-    image.alt = `Passport photo ${photo.index + 1} of 6`;
+    image.alt = `Passport photo ${photo.index + 1} of ${layout.photoCount}`;
     image.draggable = false;
     image.style.left = percent(photo.x, layout.pageWidthMm);
     image.style.top = percent(photo.y, layout.pageHeightMm);
@@ -1182,22 +1230,26 @@ function renderSheet(dataUrl, layout = computeLayout(state.layout)) {
   renderMeasurements(layout);
   renderMetrics(layout);
 
-  const exact = layout.mode === MODES.EXACT;
-  els.previewSub.textContent = `A4 portrait · ${layout.photoWidthMm.toFixed(2)} × ${layout.photoHeightMm.toFixed(
+  els.previewSub.textContent = `A4 portrait · ${layout.photoCount} photo${
+    layout.photoCount === 1 ? '' : 's'
+  } · ${layout.photoWidthMm.toFixed(2)} × ${layout.photoHeightMm.toFixed(2)} mm`;
+  els.modeBadge.textContent = `${layout.photoCount} photo${
+    layout.photoCount === 1 ? '' : 's'
+  }`;
+  els.captionDims.textContent = `${layout.photoWidthMm.toFixed(
     2,
-  )} mm · six across`;
-  els.modeBadge.textContent = exact ? 'Exact size' : 'Printer-safe';
-  els.captionDims.textContent = exact
-    ? '35.00 × 45.00 mm each · no gaps'
-    : `${layout.photoWidthMm.toFixed(2)} × ${layout.photoHeightMm.toFixed(
-        2,
-      )} mm each · ${layout.gapMm.toFixed(2)} mm gaps`;
+  )} × ${layout.photoHeightMm.toFixed(2)} mm each · ${layout.gapMm.toFixed(
+    1,
+  )} mm gaps · ${arrangementLabel(layout)}`;
   els.sheet.setAttribute(
     'aria-label',
-    `A4 portrait print preview. Six photos, each ${layout.photoWidthMm.toFixed(2)} by ${layout.photoHeightMm.toFixed(
+    `A4 portrait print preview. ${layout.photoCount} passport photos, each ${layout.photoWidthMm.toFixed(
       2,
-    )} millimetres, in one horizontal row.`,
+    )} by ${layout.photoHeightMm.toFixed(2)} millimetres, arranged in ${layout.rows} row${
+      layout.rows === 1 ? '' : 's'
+    }.`,
   );
+  els.sheetEmpty.hidden = Boolean(state.photo);
 }
 
 function percent(value, total) {
@@ -1223,15 +1275,17 @@ function renderPrintLabels(layout) {
     els.printLabels.replaceChildren();
     return;
   }
-  const nodes = layout.photos.map((photo) => {
-    const label = document.createElement('div');
-    label.className = 'print-label';
-    label.textContent = `${layout.photoWidthMm.toFixed(2)} × ${layout.photoHeightMm.toFixed(2)} mm`;
-    label.style.left = percent(photo.x + photo.widthMm / 2, layout.pageWidthMm);
-    label.style.top = percent(photo.y + photo.heightMm + 4, layout.pageHeightMm);
-    return label;
-  });
-  els.printLabels.replaceChildren(...nodes);
+  const label = document.createElement('div');
+  label.className = 'print-label';
+  label.textContent = `${layout.photoCount} × ${layout.photoWidthMm.toFixed(
+    2,
+  )} × ${layout.photoHeightMm.toFixed(2)} mm · ${layout.gapMm.toFixed(1)} mm gaps`;
+  label.style.left = percent(layout.blockX + layout.blockWidth / 2, layout.pageWidthMm);
+  label.style.top = percent(
+    clampMm(layout.blockY + layout.blockHeight + 4),
+    layout.pageHeightMm,
+  );
+  els.printLabels.replaceChildren(label);
 }
 
 function renderMeasurements(layout) {
@@ -1245,54 +1299,70 @@ function renderMeasurements(layout) {
   const nodes = [];
   const px = (value) => percent(value, layout.pageWidthMm);
   const py = (value) => percent(value, layout.pageHeightMm);
-  const exact = layout.mode === MODES.EXACT;
+  const edgeToEdge = layout.blockWidth >= 210 - 1e-6;
+  const above = layout.blockY >= 24;
+  const lineY = above
+    ? layout.blockY - 12
+    : layout.blockY + layout.blockHeight + 12;
 
   const outline = document.createElement('div');
   outline.className = 'm-row-outline';
-  outline.style.left = px(layout.rowX);
-  outline.style.top = py(layout.rowY);
-  outline.style.width = px(layout.rowWidthMm);
-  outline.style.height = py(layout.rowHeightMm);
+  outline.style.left = px(layout.blockX);
+  outline.style.top = py(layout.blockY);
+  outline.style.width = px(layout.blockWidth);
+  outline.style.height = px(layout.blockHeight);
   nodes.push(outline);
 
-  const above = layout.rowY >= 30;
-  const lineY = above ? layout.rowY - 13 : layout.rowY + layout.rowHeightMm + 13;
+  if (layout.blockY + layout.blockHeight + 50 > 297) {
+    const summary = document.createElement('div');
+    summary.className = 'm-label';
+    summary.style.left = px(layout.blockX + layout.blockWidth / 2);
+    summary.style.top = py(clampMm(layout.blockY + layout.blockHeight + 6));
+    summary.textContent = `${layout.photoCount} × ${layout.photoWidthMm.toFixed(
+      2,
+    )} × ${layout.photoHeightMm.toFixed(2)} mm · block ${layout.blockWidth.toFixed(
+      2,
+    )} × ${layout.blockHeight.toFixed(2)} mm · ${layout.gapMm.toFixed(1)} mm gaps`;
+    overlay.replaceChildren(outline, summary);
+    return;
+  }
+
   const line = document.createElement('div');
   line.className = 'm-width-line';
-  line.style.left = px(layout.rowX);
-  line.style.width = px(layout.rowWidthMm);
-  line.style.top = py(lineY);
+  line.style.left = px(layout.blockX);
+  line.style.width = px(layout.blockWidth);
+  line.style.top = py(clampMm(lineY));
   nodes.push(line);
 
   const widthLabel = document.createElement('div');
   widthLabel.className = 'm-label';
-  widthLabel.style.left = px(layout.rowX + layout.rowWidthMm / 2);
+  widthLabel.style.left = px(layout.blockX + layout.blockWidth / 2);
   widthLabel.style.top = py(clampMm(above ? lineY - 7 : lineY + 7));
-  widthLabel.textContent = exact
+  widthLabel.textContent = edgeToEdge
     ? '210.00 mm · edge-to-edge'
-    : `Row ${layout.rowWidthMm.toFixed(2)} mm`;
+    : `Block ${layout.blockWidth.toFixed(2)} mm`;
   nodes.push(widthLabel);
 
   const sizeLabel = document.createElement('div');
   sizeLabel.className = 'm-label m-muted';
-  sizeLabel.style.left = px(layout.rowX + layout.rowWidthMm / 2);
+  sizeLabel.style.left = px(layout.blockX + layout.blockWidth / 2);
   sizeLabel.style.top = py(clampMm(above ? lineY - 19 : lineY + 19));
-  sizeLabel.textContent = exact
-    ? '6 × 35.00 × 45.00 mm'
-    : `6 × ${layout.photoWidthMm.toFixed(2)} × ${layout.photoHeightMm.toFixed(2)} mm`;
+  sizeLabel.textContent = `${layout.photoCount} × ${layout.photoWidthMm.toFixed(
+    2,
+  )} × ${layout.photoHeightMm.toFixed(2)} mm`;
   nodes.push(sizeLabel);
 
   const heightLabel = document.createElement('div');
   heightLabel.className = 'm-label m-muted';
-  heightLabel.style.left = px(layout.rowX + layout.rowWidthMm / 2);
+  heightLabel.style.left = px(layout.blockX + layout.blockWidth / 2);
   heightLabel.style.top = py(
     clampMm(
-      layout.rowY +
-        layout.rowHeightMm +
-        (above ? (state.printedLabels ? 14 : 7) : state.printedLabels ? 50 : 44),
+      above
+        ? layout.blockY + layout.blockHeight + (state.printedLabels ? 13 : 7)
+        : lineY + 32,
     ),
   );
-  heightLabel.textContent = `${layout.photoHeightMm.toFixed(2)} mm high`;
+  heightLabel.textContent = `${layout.blockHeight.toFixed(2)} mm high`;
   nodes.push(heightLabel);
 
   const pageLabel = document.createElement('div');
@@ -1300,17 +1370,21 @@ function renderMeasurements(layout) {
   pageLabel.style.left = px(3);
   pageLabel.style.top = py(4);
   pageLabel.textContent = 'A4 · 210 × 297 mm';
-  if (layout.rowY > 16) nodes.push(pageLabel);
+  if (layout.blockY > 16) nodes.push(pageLabel);
 
-  if (!exact) {
-    const marginLabel = document.createElement('div');
-    marginLabel.className = 'm-label m-muted';
-    marginLabel.style.left = px(layout.rowX + layout.rowWidthMm / 2);
-    marginLabel.style.top = py(clampMm(lineY + 24));
-    marginLabel.textContent = `margins ${layout.sideMarginMm.toFixed(
-      2,
-    )} mm · gaps ${layout.gapMm.toFixed(2)} mm`;
-    nodes.push(marginLabel);
+  if (layout.gapMm > 0) {
+    const gapLabel = document.createElement('div');
+    gapLabel.className = 'm-label m-muted';
+    gapLabel.style.left = px(layout.blockX + layout.blockWidth / 2);
+    gapLabel.style.top = py(
+      clampMm(
+        above
+          ? layout.blockY + layout.blockHeight + (state.printedLabels ? 26 : 20)
+          : lineY + 45,
+      ),
+    );
+    gapLabel.textContent = `gaps ${layout.gapMm.toFixed(1)} mm · margins ${layout.blockX.toFixed(2)} mm`;
+    nodes.push(gapLabel);
   }
 
   overlay.replaceChildren(...nodes);
@@ -1322,19 +1396,33 @@ function clampMm(value) {
 
 function renderMetrics(layout) {
   const px = pixelSizeForPhoto(layout.photoWidthMm, state.dpi);
-  const exact = layout.mode === MODES.EXACT;
   const rows = [
     ['Sheet', 'A4 portrait', '210.00 × 297.00 mm', false],
     [
       'Photos',
-      `${layout.photoWidthMm.toFixed(2)} × ${layout.photoHeightMm.toFixed(2)} mm`,
-      exact ? '6 identical · 7:9' : layout.isReduced ? 'Reduced — not 35 mm wide' : 'Full 35 mm width',
-      !exact && layout.isReduced,
+      `${layout.photoCount} × ${layout.photoWidthMm.toFixed(2)} × ${layout.photoHeightMm.toFixed(2)} mm`,
+      '7:9 · exact passport size',
+      false,
     ],
-    ['Row width', `${layout.rowWidthMm.toFixed(2)} mm`, `${layout.gapMm.toFixed(2)} mm gaps`, false],
-    ['Side margins', `${layout.sideMarginMm.toFixed(2)} mm`, `row top ${layout.rowY.toFixed(2)} mm`, false],
-    ['Print file', `${px.width} × ${px.height} px`, `≈${Math.round(px.effectiveDpi)} dpi effective`, false],
-    ['Output', exact ? 'Exact 35 × 45 mm' : 'Printer-safe', 'One horizontal row', false],
+    [
+      'Arrangement',
+      `${layout.columns} across × ${layout.rows} down`,
+      arrangementLabel(layout),
+      false,
+    ],
+    ['Gap', `${layout.gapMm.toFixed(1)} mm`, 'horizontal and vertical', false],
+    [
+      'Margins',
+      `${layout.blockX.toFixed(2)} mm sides`,
+      `top ${layout.blockY.toFixed(2)} mm`,
+      false,
+    ],
+    [
+      'Print file',
+      `${px.width} × ${px.height} px`,
+      `≈${Math.round(px.effectiveDpi)} dpi effective`,
+      false,
+    ],
   ];
 
   els.metrics.replaceChildren(
@@ -1363,33 +1451,29 @@ function updateActionSummary(layout = computeLayout(state.layout)) {
   const hasPhoto = Boolean(state.photo);
   els.summaryDot.classList.toggle('is-ready', hasPhoto);
   if (!hasPhoto) {
-    els.summaryTitle.textContent = 'Upload a photo to begin';
+    els.summaryTitle.textContent = 'Add a photo to begin';
     els.summarySub.textContent =
-      'Six photos on one A4 portrait sheet · nothing leaves your device';
+      'A4 portrait · exact 35 × 45 mm passport photos';
     return;
   }
-  const exact = layout.mode === MODES.EXACT;
-  els.summaryTitle.textContent = `6 × ${layout.photoWidthMm.toFixed(2)} × ${layout.photoHeightMm.toFixed(
+  els.summaryTitle.textContent = `${layout.photoCount} × ${layout.photoWidthMm.toFixed(
     2,
-  )} mm · A4 portrait`;
-  els.summarySub.textContent = exact
-    ? `Top-aligned · edge-to-edge · starts at ${layout.rowY.toFixed(2)} mm`
-    : `Top ${layout.rowY.toFixed(2)} mm · margins ${layout.sideMarginMm.toFixed(
-        2,
-      )} mm · gaps ${layout.gapMm.toFixed(2)} mm · ${
-        layout.isReduced ? 'reduced from 35 mm' : 'full 35 mm width'
-      }`;
+  )} × ${layout.photoHeightMm.toFixed(2)} mm · A4 portrait`;
+  const placement = layout.verticalPlacement === 'centre' ? 'Centred' : 'Top-aligned';
+  els.summarySub.textContent = `${placement} · ${arrangementLabel(layout)} · ${layout.gapMm.toFixed(
+    1,
+  )} mm gaps${layout.blockX > 0.01 ? ` · ${layout.blockX.toFixed(2)} mm side margins` : ''}`;
 }
 
 function updateActionState() {
   const hasPhoto = Boolean(state.photo);
-  for (const button of [els.btnGenerate, els.btnDownload, els.btnPrint, els.btnGenerateCard]) {
+  for (const button of [els.btnGenerate, els.btnDownload, els.btnPrint]) {
     button.disabled = !hasPhoto || state.busy;
   }
+  if (els.btnToPrint) els.btnToPrint.disabled = !hasPhoto || state.busy;
   els.btnDownload.classList.toggle('is-busy', state.busy && state.busyTarget === els.btnDownload);
   els.btnPrint.classList.toggle('is-busy', state.busy && state.busyTarget === els.btnPrint);
   els.btnGenerate.classList.toggle('is-busy', state.busy && state.busyTarget === els.btnGenerate);
-  els.btnGenerateCard.classList.toggle('is-busy', state.busy && state.busyTarget === els.btnGenerateCard);
 }
 
 function setBusy(busy, target = null) {
@@ -1399,12 +1483,32 @@ function setBusy(busy, target = null) {
 }
 
 function updateStepper() {
-  const steps = els.stepper.querySelectorAll('.step');
-  steps.forEach((step, index) => {
-    const number = index + 1;
-    step.classList.toggle('is-active', number === state.step);
-    step.classList.toggle('is-done', number < state.step);
-  });
+  const hasPhoto = Boolean(state.photo);
+  const printStage = hasPhoto && state.stage === 'print';
+  if (!hasPhoto) state.stage = 'photo';
+
+  els.uploadCard.hidden = hasPhoto;
+  els.workspace.hidden = !hasPhoto;
+  els.stagePhoto.hidden = !hasPhoto || printStage;
+  els.stagePrint.hidden = !hasPhoto || !printStage;
+  els.sheetEmpty.hidden = hasPhoto;
+
+  els.stageRailPhoto.classList.toggle('is-active', !printStage);
+  els.stageRailPhoto.classList.toggle('is-done', printStage);
+  els.stageRailPrint.classList.toggle('is-active', printStage);
+  els.sidebarStageTitle.textContent = printStage ? 'Print setup' : 'Photo setup';
+  els.previewStageLabel.textContent = printStage ? 'Print setup' : 'Photo setup';
+  els.sidebarToggleLabel.textContent = !hasPhoto
+    ? 'Upload'
+    : printStage
+      ? 'Print settings'
+      : 'Adjust photo';
+  els.modeBadge.hidden = !hasPhoto;
+  if (!hasPhoto) {
+    els.previewSub.textContent = '210 × 297 mm portrait';
+    els.modeBadge.textContent = '';
+  }
+  els.btnToPrint.disabled = !hasPhoto || state.busy;
 }
 
 function toast(message, type = 'success', timeout = 4200) {
@@ -1509,7 +1613,6 @@ async function generatePreview(trigger) {
     state.previewDataUrl = assets.dataUrl;
     renderSheet(assets.dataUrl, assets.layout);
     updateLayoutUI();
-    state.step = 3;
     updateStepper();
     updatePrintStatus(assets.layout, assets);
     toast(
@@ -1533,9 +1636,10 @@ function downloadPdf() {
     const assets = await ensureExportAssets();
     const artifact = createPdfArtifact(assets);
     triggerDownload(artifact.blob, artifact.filename);
-    state.step = 4;
     updateStepper();
-    toast('PDF downloaded — one A4 portrait page, six photos.');
+    toast(
+      `PDF downloaded — one A4 portrait page, ${layoutCountLabel(state.layout)}.`,
+    );
   });
 }
 
@@ -1572,7 +1676,6 @@ function isMobileDevice() {
 function openPdfForPrinting(artifact) {
   const url = URL.createObjectURL(artifact.blob);
   const opened = window.open(url, '_blank');
-  state.step = 4;
   updateStepper();
   if (!opened) {
     triggerDownload(artifact.blob, artifact.filename);
@@ -1664,7 +1767,6 @@ async function printDirect(assets) {
     ),
   );
 
-  state.step = 4;
   updateStepper();
   let cleanedUp = false;
   const cleanup = () => {
@@ -1723,7 +1825,7 @@ function sharePrintPdf(assets = state.printAssets ?? state.exportAssets) {
     sharePromise = navigator.share({
       files: [file],
       title: 'Passport photos — A4',
-      text: 'Six 35 × 45 mm photos on one A4 page. Print at 100% / actual size.',
+      text: `${assets.layout.photoCount} × 35 × 45 mm passport photos on one A4 page. Print at 100% / actual size.`,
     });
   } catch (error) {
     console.warn('Share could not start', error);
@@ -1733,7 +1835,6 @@ function sharePrintPdf(assets = state.printAssets ?? state.exportAssets) {
 
   sharePromise
     .then(() => {
-      state.step = 4;
       updateStepper();
       toast(
         'Share sheet opened. Choose Print (AirPrint) or your printer app, then A4 and 100%.',
@@ -1763,7 +1864,6 @@ function savePrintPdf() {
     const artifact = createPdfArtifact(assets);
     triggerDownload(artifact.blob, artifact.filename);
     closePrintDialog();
-    state.step = 4;
     updateStepper();
     toast('PDF saved. Open it and print at 100% / Actual size.');
   } catch (error) {
@@ -1784,10 +1884,15 @@ async function runExport(trigger, task) {
   }
 }
 
+function layoutCountLabel(value) {
+  const layout = computeLayout(value);
+  return `${layout.photoCount} photo${layout.photoCount === 1 ? '' : 's'}`;
+}
+
 function fileNameFor(layout) {
   const width = layout.photoWidthMm.toFixed(2).replace('.', '-');
   const height = layout.photoHeightMm.toFixed(2).replace('.', '-');
-  return `passport-photos-6up-${width}x${height}mm-a4.pdf`;
+  return `passport-photos-${layout.photoCount}up-${width}x${height}mm-a4.pdf`;
 }
 
 function triggerDownload(blob, filename) {
@@ -1831,9 +1936,11 @@ function updatePrintStatus(layout = computeLayout(state.layout), assets = state.
 
   if (assets) {
     els.printReadyBadge.textContent = 'Ready';
-    els.exportNote.textContent = `Ready to export · ${px.width} × ${px.height} px · ${mm(
-      layout.photoWidthMm,
-    )} × ${mm(layout.photoHeightMm)} per photo. Changing crop, size or enhancement will ask you to regenerate.`;
+    els.exportNote.textContent = `Ready to export · ${layout.photoCount} photo${
+      layout.photoCount === 1 ? '' : 's'
+    } · ${px.width} × ${px.height} px · ${mm(layout.photoWidthMm)} × ${mm(
+      layout.photoHeightMm,
+    )} each. Changing photo or print settings will ask you to regenerate.`;
   } else {
     els.printReadyBadge.textContent = 'Not generated';
     els.exportNote.textContent =
@@ -1852,26 +1959,22 @@ async function openPrintDialog() {
   try {
     state.printAssets = await ensureExportAssets();
     const layout = state.printAssets.layout;
-    const exact = layout.mode === MODES.EXACT;
     const mobile = isMobileDevice();
-    els.printSummary.textContent = `${exact ? 'Exact size' : 'Printer-safe'} · A4 portrait · 6 × ${layout.photoWidthMm.toFixed(
-      2,
-    )} × ${layout.photoHeightMm.toFixed(2)} mm`;
+    els.printSummary.textContent = `${layout.photoCount} photo${
+      layout.photoCount === 1 ? '' : 's'
+    } · A4 portrait · ${layout.photoWidthMm.toFixed(2)} × ${layout.photoHeightMm.toFixed(2)} mm each`;
 
-    const modeNote = exact
-      ? 'In Exact mode the photos run to the paper edge. If your printer has non-printable margins, the outer photos may be clipped — use Printer-safe instead.'
-      : layout.isReduced
-        ? `These photos are ${layout.photoWidthMm.toFixed(2)} × ${layout.photoHeightMm.toFixed(
-            2,
-          )} mm, not 35 × 45 mm, to stay inside printable margins.`
-        : 'These photos are exactly 35 × 45 mm; printing them still requires borderless support because they reach the paper edge.';
-    const mobileModeNote = exact
-      ? 'Exact mode runs to the paper edge — borderless printing only.'
-      : layout.isReduced
-        ? `Photos will print at ${layout.photoWidthMm.toFixed(2)} × ${layout.photoHeightMm.toFixed(
-            2,
-          )} mm, not 35 mm.`
-        : 'Photos are exactly 35 × 45 mm; borderless printing is still required.';
+    const edgeToEdge = layout.blockWidth >= 210 - 1e-6;
+    const modeNote = edgeToEdge
+      ? 'These photos reach the paper edge. If your printer has non-printable margins, the outer photos may be clipped — print borderless or trim the sheet.'
+      : `The photos stay exactly ${layout.photoWidthMm.toFixed(2)} × ${layout.photoHeightMm.toFixed(
+          2,
+        )} mm with ${layout.blockX.toFixed(2)} mm side margins. Print at 100% / Actual size.`;
+    const mobileModeNote = edgeToEdge
+      ? 'The sheet runs edge-to-edge — use borderless printing if possible.'
+      : `Side margins are ${layout.blockX.toFixed(2)} mm; photos stay ${layout.photoWidthMm.toFixed(
+          2,
+        )} × ${layout.photoHeightMm.toFixed(2)} mm.`;
     els.printWarning.textContent = mobile
       ? `Tap Print / Share PDF. If the share sheet opens, choose Print (AirPrint); otherwise the print dialog opens directly. Keep A4, Portrait and 100% / Actual size. ${mobileModeNote}`
       : modeNote;
@@ -1943,7 +2046,6 @@ async function printNow() {
     });
     printHtmlDocument(html, {
       onPrinted: () => {
-        state.step = 4;
         updateStepper();
         setBusy(false);
         toast('Print dialog opened. Choose A4, Portrait and 100% / Actual size.', 'success', 5500);

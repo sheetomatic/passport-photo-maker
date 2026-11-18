@@ -2,7 +2,7 @@
  * End-to-end verification in a real Chrome browser.
  *
  * Covers: upload validation, crop/enhancement controls, live A4 geometry,
- * printer-safe mode, full-resolution render, actual PDF download, the print
+ * quantity/gap print layouts, full-resolution render, actual PDF download, the print
  * stylesheet, print dialog, replace/remove and mobile overflow.
  *
  * Run: npm run test:e2e
@@ -215,9 +215,29 @@ async function main() {
     assert.equal(await page.$eval('#btnGenerate', (button) => button.disabled), true);
     assert.equal(await page.$eval('#btnPrint', (button) => button.disabled), true);
     assert.equal(
-      await page.$eval('#workspace', (element) => getComputedStyle(element).display),
+      await page.$eval('#workspace', (element) => element.hidden),
+      true,
+      'settings workspace must be hidden before upload',
+    );
+    assert.equal(
+      await page.$eval('#stagePhoto', (element) => element.hidden),
+      true,
+      'photo setup must not show before upload',
+    );
+    assert.equal(
+      await page.$eval('#sidebar', (element) => element.offsetParent !== null),
+      true,
+      'desktop settings sidebar should be visible',
+    );
+    assert.equal(
+      await page.$eval('#btnOpenSidebar', (element) => getComputedStyle(element).display),
       'none',
-      'workspace must be hidden before upload',
+      'drawer toggle is mobile-only',
+    );
+    assert.equal(
+      await page.$eval('#sheetEmpty', (element) => !element.hidden),
+      true,
+      'empty A4 preview should be shown',
     );
     assert.equal(
       await page.$eval('.capture-actions', (element) => getComputedStyle(element).display),
@@ -292,17 +312,31 @@ async function main() {
       close(image.x * mm, index * 35, 0.2, `photo ${index + 1} x`);
       close(image.y * mm, 0, 0.2, `photo ${index + 1} y`);
     });
-    assert.equal(await page.$eval('#modeExact', (element) => element.getAttribute('aria-pressed')), 'true');
-    assert.match(await page.$eval('#actualSize', (element) => element.textContent), /35\.00 × 45\.00/);
     assert.equal(
-      await page.$eval('.step[data-step="2"]', (element) => element.classList.contains('is-active')),
-      true,
-      'step 2 should be active after upload',
+      await page.$eval('#stagePhoto', (element) => element.hidden),
+      false,
+      'photo setup should be visible after upload',
     );
     assert.equal(
-      await page.$eval('#safeOptions', (element) => getComputedStyle(element).display),
-      'none',
-      'printer-safe controls must be hidden in exact mode',
+      await page.$eval('#stagePrint', (element) => element.hidden),
+      true,
+      'print setup should be hidden until approved',
+    );
+    assert.equal(
+      await page.$eval('#sidebarStageTitle', (element) => element.textContent),
+      'Photo setup',
+    );
+    assert.equal(await page.$eval('#countValue', (element) => element.textContent), '6');
+    assert.equal(await page.$eval('#gapValue', (element) => element.textContent), '0.0 mm');
+    assert.match(await page.$eval('#actualSize', (element) => element.textContent), /6 × 35\.00 × 45\.00/);
+    assert.equal(
+      await page.$eval('#modeBadge', (element) => element.textContent.trim()),
+      '6 photos',
+    );
+    assert.equal(
+      await page.$eval('#sheetEmpty', (element) => element.hidden),
+      true,
+      'empty preview overlay should be hidden after upload',
     );
     assert.equal(
       await page.$eval('#measureOverlay', (element) => element.hidden),
@@ -310,125 +344,34 @@ async function main() {
       'measurements should be visible by default',
     );
 
-    console.log('5. printer-safe mode is honest about dimensions');
-    await page.click('#modeSafe');
-    await sleep(350);
-    const safeLayout = await page.evaluate(() => window.__passportApp.getLayout());
-    close(safeLayout.photoWidthMm, 188 / 6, 1e-9, 'safe width');
-    close(safeLayout.photoHeightMm, (188 / 6) * (45 / 35), 1e-9, 'safe height');
-    const safeGeometry = await getSheetGeometry(page);
-    const safeMm = safeGeometry.mmPerPx;
-    safeGeometry.images.forEach((image, index) => {
-      close(image.width * safeMm, 188 / 6, 0.2, `safe photo ${index + 1} width`);
-      close(image.x * safeMm, 6 + index * (188 / 6 + 2), 0.2, `safe photo ${index + 1} x`);
-      close(image.y * safeMm, 6, 0.2, `safe photo ${index + 1} y`);
-      if (index > 0) {
-        const previous = safeGeometry.images[index - 1];
-        close(image.x * safeMm - (previous.x + previous.width) * safeMm, 2, 0.2, 'gap');
-      }
+    console.log('5. approval gate moves from photo setup to print setup');
+    await page.$eval('#btnToPrint', (element) =>
+      element.scrollIntoView({ block: 'center', behavior: 'instant' }),
+    );
+    await page.click('#btnToPrint');
+    await page.waitForFunction(() => !document.getElementById('stagePrint').hidden, {
+      timeout: 5000,
     });
-    assert.notEqual(
-      await page.$eval('#safeOptions', (element) => getComputedStyle(element).display),
-      'none',
-      'printer-safe controls must be shown in safe mode',
-    );
-    assert.match(
-      await page.$eval('#actualSize', (element) => element.textContent),
-      /31\.33 × 40\.29 mm \(reduced from 35 mm\)/,
-    );
-    assert.match(
-      await page.$eval('#printerWarning', (element) => element.textContent),
-      /not|reduced|gives up/i,
-    );
     assert.equal(
-      await page.$eval('#summaryTitle', (element) => element.textContent).then((text) =>
-        text.includes('35.00 × 45.00'),
-      ),
-      false,
-      'safe mode must not claim 35 mm photos',
+      await page.$eval('#sidebarStageTitle', (element) => element.textContent),
+      'Print setup',
     );
-
-    // Zero margin + zero gap must not be described as "reduced".
-    await page.evaluate(() => {
-      const margin = document.getElementById('safeMargin');
-      margin.value = '0';
-      margin.dispatchEvent(new Event('input', { bubbles: true }));
-      const gap = document.getElementById('gap');
-      gap.value = '0';
-      gap.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await sleep(350);
-    const zeroLayout = await page.evaluate(() => window.__passportApp.getLayout());
-    close(zeroLayout.photoWidthMm, 35, 1e-9, 'zero-margin width');
-    assert.match(await page.$eval('#actualSize', (element) => element.textContent), /full 35 mm width/);
-    assert.match(await page.$eval('#summarySub', (element) => element.textContent), /full 35 mm width/);
-    await page.evaluate(() => {
-      const margin = document.getElementById('safeMargin');
-      margin.value = '6';
-      margin.dispatchEvent(new Event('input', { bubbles: true }));
-      const gap = document.getElementById('gap');
-      gap.value = '2';
-      gap.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await sleep(350);
-
-    await page.click('#modeExact');
-    await sleep(250);
-
-    console.log('6. preview controls: measurements, guides, labels, vertical position');
-    await page.click('#showMeasurements');
-    await sleep(250);
-    assert.equal(await page.$eval('#measureOverlay', (element) => element.hidden), true);
-    await page.click('#showMeasurements');
-    await sleep(250);
-    assert.equal(await page.$eval('#measureOverlay', (element) => element.hidden), false);
-
-    await page.select('#guidesSelect', 'none');
-    await sleep(250);
-    assert.equal(await page.$$eval('#sheetGuides line', (lines) => lines.length), 0);
-    await page.select('#guidesSelect', 'hairline');
-    await sleep(250);
-    assert.equal(await page.$$eval('#sheetGuides line', (lines) => lines.length), 7);
-    await page.select('#guidesSelect', 'cutmarks');
-    await sleep(250);
-
-    await page.click('#printedLabels');
-    await sleep(350);
-    assert.equal(await page.$$eval('#printLabels .print-label', (labels) => labels.length), 6);
-    assert.match(
-      await page.$eval('#printLabels .print-label', (element) => element.textContent),
-      /35\.00 × 45\.00 mm/,
-    );
-    await page.click('#printedLabels');
-    await sleep(250);
-    assert.equal(await page.$$eval('#printLabels .print-label', (labels) => labels.length), 0);
-
-    // Top is the default. Switching to Centred moves the row to 126 mm, and
-    // the nudge moves it further down from either base.
-    assert.equal(await page.evaluate(() => window.__passportApp.getLayout().rowY), 0);
-    await page.click('#posCentre');
-    await sleep(350);
-    close(await page.evaluate(() => window.__passportApp.getLayout().rowY), 126, 1e-6, 'centre row');
+    assert.equal(await page.$eval('#stagePhoto', (element) => element.hidden), true);
     assert.equal(
-      await page.$eval('#posCentre', (element) => element.getAttribute('aria-pressed')),
-      'true',
+      await page.$eval('#stageRailPrint', (element) => element.classList.contains('is-active')),
+      true,
     );
-    await page.evaluate(() => {
-      const vertical = document.getElementById('vertical');
-      vertical.value = '20';
-      vertical.dispatchEvent(new Event('input', { bubbles: true }));
+    await page.$eval('#btnBackToPhoto', (element) =>
+      element.scrollIntoView({ block: 'center', behavior: 'instant' }),
+    );
+    await page.click('#btnBackToPhoto');
+    await page.waitForFunction(() => !document.getElementById('stagePhoto').hidden, {
+      timeout: 5000,
     });
-    await sleep(350);
-    close(await page.evaluate(() => window.__passportApp.getLayout().rowY), 146, 1e-6, 'centred nudge');
-    await page.click('#posTop');
-    await sleep(300);
-    assert.equal(await page.evaluate(() => window.__passportApp.getLayout().rowY), 0);
-    await page.evaluate(() => {
-      const vertical = document.getElementById('vertical');
-      vertical.value = '0';
-      vertical.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await sleep(300);
+    assert.equal(
+      await page.$eval('#sidebarStageTitle', (element) => element.textContent),
+      'Photo setup',
+    );
 
     console.log('7. crop zoom, drag and reset');
     const beforeZoom = (await getSheetGeometry(page)).images[0].src;
@@ -443,6 +386,10 @@ async function main() {
     const afterZoom = (await getSheetGeometry(page)).images[0].src;
     assert.notEqual(afterZoom, beforeZoom, 'zooming should re-render the print photo');
 
+    await page.$eval('#cropFrame', (element) =>
+      element.scrollIntoView({ block: 'center', behavior: 'instant' }),
+    );
+    await sleep(250);
     const cropBox = await page.$eval('#cropFrame', (element) => {
       const rect = element.getBoundingClientRect();
       return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
@@ -464,7 +411,7 @@ async function main() {
     await sleep(500);
     close(await page.evaluate(() => window.__passportApp.state.crop.zoom), 1, 0.001, 'reset zoom');
 
-    console.log('8. enhancement comparison and reset');
+    console.log('7b. enhancement comparison and reset');
     const enhancedSrc = (await getSheetGeometry(page)).images[0].src;
     await page.click('#optOriginal');
     await sleep(450);
@@ -591,7 +538,7 @@ async function main() {
     const reEnabledCorner = await getPhotoCorner(page);
     assert.ok(reEnabledCorner.topLeft.slice(0, 3).every((value) => value > 248));
 
-    console.log('8c. reframe with the face suggestion for the final preview');
+    console.log('8b. reframe with the face suggestion for the final preview');
     await page.$eval('#btnDetectFace', (element) =>
       element.scrollIntoView({ block: 'center', behavior: 'instant' }),
     );
@@ -603,18 +550,110 @@ async function main() {
     );
     await sleep(500);
 
-    console.log('9. generate full-resolution preview');
+    console.log('9. quantity, gap, placement and print controls');
+    await page.$eval('#btnToPrint', (element) =>
+      element.scrollIntoView({ block: 'center', behavior: 'instant' }),
+    );
+    await page.click('#btnToPrint');
+    await page.waitForFunction(() => !document.getElementById('stagePrint').hidden, {
+      timeout: 5000,
+    });
+
+    await page.$eval('#countPlus', (element) =>
+      element.scrollIntoView({ block: 'center', behavior: 'instant' }),
+    );
+    await page.click('#countPlus');
+    await page.click('#countPlus');
+    await page.click('[data-gap="2"]');
+    await page.waitForFunction(() => document.querySelectorAll('#sheetPhotos img').length === 8, {
+      timeout: 8000,
+    });
+    await sleep(500);
+
+    const gridLayout = await page.evaluate(() => window.__passportApp.getLayout());
+    assert.equal(gridLayout.photoCount, 8);
+    assert.equal(gridLayout.gapMm, 2);
+    assert.equal(gridLayout.columns, 4);
+    assert.equal(gridLayout.rows, 2);
+    close(gridLayout.blockWidth, 146, 1e-9, 'block width');
+    close(gridLayout.blockX, 32, 1e-9, 'block x');
+
+    const gridGeometry = await getSheetGeometry(page);
+    assert.equal(gridGeometry.images.length, 8);
+    const gridMm = gridGeometry.mmPerPx;
+    gridGeometry.images.forEach((image, index) => {
+      const photo = gridLayout.photos[index];
+      close(image.width * gridMm, 35, 0.2, `grid photo ${index + 1} width`);
+      close(image.height * gridMm, 45, 0.2, `grid photo ${index + 1} height`);
+      close(image.x * gridMm, photo.x, 0.2, `grid photo ${index + 1} x`);
+      close(image.y * gridMm, photo.y, 0.2, `grid photo ${index + 1} y`);
+    });
+    assert.equal(await page.$eval('#countValue', (element) => element.textContent), '8');
+    assert.equal(await page.$eval('#gapValue', (element) => element.textContent), '2.0 mm');
+    assert.match(
+      await page.$eval('#layoutSummary', (element) => element.textContent),
+      /8 photos · 4 across × 2 down · 2\.0 mm gaps/,
+    );
+    assert.match(
+      await page.$eval('#previewSub', (element) => element.textContent),
+      /8 photos/,
+    );
+    assert.equal(
+      await page.$$eval('[data-count="8"]', (elements) => elements[0].classList.contains('is-selected')),
+      true,
+    );
+    assert.equal(
+      await page.$$eval('[data-gap="2"]', (elements) => elements[0].classList.contains('is-selected')),
+      true,
+    );
+
+    await page.click('#posCentre');
+    await sleep(300);
+    close(
+      await page.evaluate(() => window.__passportApp.getLayout().blockY),
+      (297 - 92) / 2,
+      0.01,
+      'centred block',
+    );
+    await page.click('#posTop');
+    await sleep(300);
+    assert.equal(await page.evaluate(() => window.__passportApp.getLayout().blockY), 0);
+
+    await page.click('#showMeasurements');
+    await sleep(250);
+    assert.equal(await page.$eval('#measureOverlay', (element) => element.hidden), true);
+    await page.click('#showMeasurements');
+    await sleep(250);
+    assert.equal(await page.$eval('#measureOverlay', (element) => element.hidden), false);
+
+    await page.select('#guidesSelect', 'none');
+    await sleep(250);
+    assert.equal(await page.$$eval('#sheetGuides line', (lines) => lines.length), 0);
+    await page.select('#guidesSelect', 'hairline');
+    await sleep(250);
+    assert.equal(await page.$$eval('#sheetGuides line', (lines) => lines.length), 32);
+    await page.select('#guidesSelect', 'cutmarks');
+    await sleep(250);
+    assert.equal(await page.$$eval('#sheetGuides line', (lines) => lines.length), 64);
+
+    await page.click('#printedLabels');
+    await sleep(350);
+    assert.equal(await page.$$eval('#printLabels .print-label', (labels) => labels.length), 1);
+    assert.match(
+      await page.$eval('#printLabels .print-label', (element) => element.textContent),
+      /8 × 35\.00 × 45\.00 mm · 2\.0 mm gaps/,
+    );
+    await page.click('#printedLabels');
+    await sleep(250);
+    assert.equal(await page.$$eval('#printLabels .print-label', (labels) => labels.length), 0);
+
+    console.log('10. generate full-resolution preview');
     await page.click('#btnGenerate');
     await page.waitForFunction(
       () => document.getElementById('printReadyBadge').textContent.trim() === 'Ready',
       { timeout: 20000 },
     );
     await sleep(300);
-    assert.equal(
-      await page.$eval('.step[data-step="3"]', (element) => element.classList.contains('is-active')),
-      true,
-      'step 3 after generate',
-    );
     const checkCount = await page.$$eval('#geometryChecks li', (items) => items.length);
     assert.ok(checkCount >= 7, `expected at least 7 checks, got ${checkCount}`);
     assert.equal(
@@ -636,20 +675,17 @@ async function main() {
 
     await sleep(4800); // let transient toasts clear before the review screenshot
     await page.evaluate(() => {
-      const sheet = document.getElementById('sheet');
-      const rect = sheet.getBoundingClientRect();
-      const top = rect.top + window.scrollY - Math.max(84, (window.innerHeight - rect.height) / 2);
-      window.scrollTo({ top: Math.max(0, top), behavior: 'instant' });
+      document.querySelector('.sidebar-scroll')?.scrollTo({ top: 0, behavior: 'instant' });
     });
     await sleep(350);
     await page.screenshot({ path: path.join(SCREENSHOTS, 'app-desktop.png') });
     const sheetHandle = await page.$('#sheet');
     await sheetHandle.screenshot({ path: path.join(SCREENSHOTS, 'sheet-closeup.png') });
 
-    console.log('10. PDF bytes are a single A4 portrait page with six 35 x 45 mm photos');
+    console.log('11. PDF bytes contain all eight selected photos on one A4 page');
     const pdfInfo = await page.evaluate(() => window.__passportApp.generatePdfBytes());
     assert.equal(pdfInfo.allPass, true);
-    assert.equal(pdfInfo.layout.photos.length, 6);
+    assert.equal(pdfInfo.layout.photos.length, 8);
     assert.equal(pdfInfo.pixels.width % 7, 0);
     assert.equal(pdfInfo.pixels.height * 7, pdfInfo.pixels.width * 9);
     const pdfBuffer = Buffer.from(pdfInfo.bytes);
@@ -660,7 +696,7 @@ async function main() {
     close((parsed.heightPt * 25.4) / 72, 297, 0.01, 'PDF height mm');
     assert.equal(pageCount(parsed.text), 1, 'PDF should have exactly one page');
 
-    console.log('11. actual PDF download works');
+    console.log('12. actual PDF download works');
     const downloadDir = await fs.mkdtemp(path.join(os.tmpdir(), 'passport-download-'));
     const client = await page.createCDPSession();
     await client.send('Browser.setDownloadBehavior', {
@@ -680,23 +716,18 @@ async function main() {
       }
     }
     assert.ok(downloaded, 'PDF download did not complete');
-    assert.match(downloaded.name, /passport-photos-6up-35-00x45-00mm-a4\.pdf/);
+    assert.match(downloaded.name, /passport-photos-8up-35-00x45-00mm-a4\.pdf/);
     assert.ok(downloaded.size > 20000, 'downloaded PDF looks too small');
     const downloadedPdf = await fs.readFile(downloaded.filePath);
     const downloadedParsed = parsePdfMediaBox(downloadedPdf);
     close((downloadedParsed.widthPt * 25.4) / 72, 210, 0.01, 'downloaded PDF width');
     close((downloadedParsed.heightPt * 25.4) / 72, 297, 0.01, 'downloaded PDF height');
     assert.equal(pageCount(downloadedParsed.text), 1);
-    assert.equal(
-      await page.$eval('.step[data-step="4"]', (element) => element.classList.contains('is-active')),
-      true,
-      'step 4 after download',
-    );
 
-    console.log('12. print stylesheet produces the same A4 geometry');
+    console.log('13. print stylesheet produces the same A4 geometry');
     const printHtml = await page.evaluate(() => window.__passportApp.buildPrintHtml());
     assert.match(printHtml, /@page \{ size: 210mm 297mm; margin: 0; \}/);
-    assert.equal((printHtml.match(/<img class="photo"/g) || []).length, 6);
+    assert.equal((printHtml.match(/<img class="photo"/g) || []).length, 8);
     assert.match(printHtml, /width:35mm;height:45mm/);
 
     const printPage = await browser.newPage();
@@ -715,11 +746,13 @@ async function main() {
     });
     const pxPerMm = printGeometry.sheet.width / 210;
     close(printGeometry.sheet.height / pxPerMm, 297, 0.5, 'print sheet height');
+    assert.equal(printGeometry.images.length, 8);
     printGeometry.images.forEach((image, index) => {
+      const photo = gridLayout.photos[index];
       close(image.width / pxPerMm, 35, 0.2, `print photo ${index + 1} width`);
       close(image.height / pxPerMm, 45, 0.2, `print photo ${index + 1} height`);
-      close(image.x / pxPerMm, index * 35, 0.2, `print photo ${index + 1} x`);
-      close(image.y / pxPerMm, 0, 0.2, `print photo ${index + 1} y`);
+      close(image.x / pxPerMm, photo.x, 0.2, `print photo ${index + 1} x`);
+      close(image.y / pxPerMm, photo.y, 0.2, `print photo ${index + 1} y`);
     });
     const printedPdf = await printPage.pdf({ preferCSSPageSize: true, printBackground: true });
     const printedParsed = parsePdfMediaBox(printedPdf);
@@ -729,21 +762,21 @@ async function main() {
     assert.deepEqual(printErrors, []);
     await printPage.close();
 
-    console.log('13. print dialog and instructions');
+    console.log('14. print dialog and instructions');
     await page.click('#btnPrint');
     await page.waitForFunction(() => document.getElementById('printDialog').open, { timeout: 15000 });
     assert.match(
       await page.$eval('#printSummary', (element) => element.textContent),
-      /A4 portrait · 6 × 35\.00 × 45\.00 mm/,
+      /8 photos · A4 portrait · 35\.00 × 45\.00 mm each/,
     );
     assert.match(
       await page.$eval('#printWarning', (element) => element.textContent),
-      /Exact mode|clipped/,
+      /side margins|Actual size|Print at/i,
     );
     await page.click('#btnCancelPrint');
     assert.equal(await page.$eval('#printDialog', (dialog) => dialog.open), false);
 
-    console.log('14. replacing the photo updates all six copies');
+    console.log('15. replacing the photo updates every selected copy');
     const oldSrc = (await getSheetGeometry(page)).images[0].src;
     await (await page.$('#fileInput')).uploadFile(replacementPath);
     await page.waitForFunction(
@@ -751,16 +784,17 @@ async function main() {
       { timeout: 20000 },
     );
     await page.waitForFunction(
-      () => document.querySelectorAll('#sheetPhotos img').length === 6,
+      () => document.querySelectorAll('#sheetPhotos img').length === 8,
       { timeout: 20000 },
     );
     await sleep(900);
     const replacedGeometry = await getSheetGeometry(page);
     assert.notEqual(replacedGeometry.images[0].src, oldSrc);
+    assert.equal(replacedGeometry.images.length, 8);
     assert.ok(replacedGeometry.images.every((image) => image.src === replacedGeometry.images[0].src));
     close(replacedGeometry.images[0].width * replacedGeometry.mmPerPx, 35, 0.2);
 
-    console.log('15. mobile camera capture, layout and direct print/share');
+    console.log('16. mobile camera capture, layout and direct print/share');
     const mobile = await browser.newPage();
     const mobileErrors = [];
     mobile.on('pageerror', (error) => mobileErrors.push(error.message));
@@ -792,16 +826,39 @@ async function main() {
     });
     await mobile.goto(server.url, { waitUntil: 'domcontentloaded' });
     await mobile.waitForSelector('#uploadCard');
+    await mobile.waitForFunction(
+      () =>
+        getComputedStyle(document.getElementById('btnOpenSidebar')).display !== 'none' &&
+        getComputedStyle(document.getElementById('sidebar')).position === 'fixed',
+      { timeout: 8000 },
+    );
+    await sleep(400);
 
     assert.equal(await mobile.evaluate(() => window.__passportApp.isMobileDevice()), true);
     assert.equal(
+      await mobile.evaluate(() => window.__passportApp.state.stage),
+      'photo',
+    );
+    const drawerClosed = await mobile.evaluate(() => {
+      const sidebar = document.getElementById('sidebar').getBoundingClientRect();
+      const toggle = document.getElementById('btnOpenSidebar');
+      return {
+        offscreen: sidebar.right <= 1,
+        toggleVisible:
+          toggle.getClientRects().length > 0 &&
+          getComputedStyle(toggle).display !== 'none' &&
+          getComputedStyle(toggle).visibility !== 'hidden',
+        emptyVisible: !document.getElementById('sheetEmpty').hidden,
+        label: document.getElementById('sidebarToggleLabel').textContent,
+      };
+    });
+    assert.equal(drawerClosed.offscreen, true, 'sidebar starts off-canvas on a phone');
+    assert.equal(drawerClosed.toggleVisible, true);
+    assert.equal(drawerClosed.emptyVisible, true);
+    assert.equal(drawerClosed.label, 'Upload');
+    assert.equal(
       await mobile.$eval('.capture-actions', (element) => getComputedStyle(element).display),
       'grid',
-    );
-    assert.equal(
-      await mobile.$eval('#btnTakePhoto', (element) => element.offsetParent !== null),
-      true,
-      'Take Photo must be visible on mobile',
     );
     assert.equal(
       await mobile.$eval('#cameraInput', (element) => element.getAttribute('capture')),
@@ -825,7 +882,18 @@ async function main() {
       /Add to Home Screen/i,
     );
     await mobile.click('#btnDoneInstall');
-    await sleep(1100); // let the entry animation finish before the review screenshot
+
+    await mobile.click('#btnOpenSidebar');
+    await mobile.waitForFunction(() => document.body.classList.contains('sidebar-open'), {
+      timeout: 3000,
+    });
+    await sleep(350);
+    assert.equal(
+      await mobile.$eval('#btnTakePhoto', (element) => element.offsetParent !== null),
+      true,
+      'Take Photo must be reachable in the mobile settings drawer',
+    );
+    await sleep(700);
     await mobile.screenshot({
       path: path.join(SCREENSHOTS, 'app-mobile-upload.png'),
       fullPage: false,
@@ -846,6 +914,12 @@ async function main() {
       true,
       'Retake must be reachable on mobile',
     );
+    await mobile.click('#btnCloseSidebar');
+    await mobile.waitForFunction(() => !document.body.classList.contains('sidebar-open'), {
+      timeout: 3000,
+    });
+    await sleep(400);
+
     const overflow = await mobile.evaluate(() => ({
       scrollWidth: document.documentElement.scrollWidth,
       innerWidth: window.innerWidth,
@@ -857,10 +931,24 @@ async function main() {
     const mobileGeometry = await getSheetGeometry(mobile);
     assert.equal(mobileGeometry.images.length, 6);
     close(mobileGeometry.images[0].width * mobileGeometry.mmPerPx, 35, 0.3, 'mobile photo width');
-    await mobile.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
-    await sleep(400);
+    assert.equal(
+      await mobile.$eval('#sidebarToggleLabel', (element) => element.textContent),
+      'Adjust photo',
+    );
     await mobile.screenshot({ path: path.join(SCREENSHOTS, 'app-mobile.png'), fullPage: false });
 
+    await mobile.click('#btnOpenSidebar');
+    await sleep(300);
+    await mobile.$eval('#btnToPrint', (element) =>
+      element.scrollIntoView({ block: 'center', behavior: 'instant' }),
+    );
+    await mobile.click('#btnToPrint');
+    await mobile.waitForFunction(() => !document.getElementById('stagePrint').hidden, {
+      timeout: 5000,
+    });
+    await mobile.$eval('#btnPrint', (element) =>
+      element.scrollIntoView({ block: 'center', behavior: 'instant' }),
+    );
     await mobile.click('#btnPrint');
     await mobile.waitForFunction(() => document.getElementById('printDialog').open, {
       timeout: 20000,
@@ -896,6 +984,9 @@ async function main() {
         window.__printPortalGuides = document.querySelectorAll('#printPortal svg line').length;
       };
     });
+    await mobile.$eval('#btnPrint', (element) =>
+      element.scrollIntoView({ block: 'center', behavior: 'instant' }),
+    );
     await mobile.click('#btnPrint');
     await mobile.waitForFunction(() => document.getElementById('printDialog').open, {
       timeout: 20000,
@@ -907,7 +998,7 @@ async function main() {
       guides: window.__printPortalGuides,
     }));
     assert.equal(portalInfo.images, 6);
-    assert.ok(portalInfo.guides >= 7, `expected cut-mark lines, got ${portalInfo.guides}`);
+    assert.ok(portalInfo.guides >= 48, `expected cut-mark lines, got ${portalInfo.guides}`);
     assert.equal(
       await mobile.evaluate(() => document.documentElement.classList.contains('has-print-portal')),
       true,
@@ -958,7 +1049,7 @@ async function main() {
     assert.deepEqual(mobileErrors, []);
     await mobile.close();
 
-    console.log('16. PWA is installable and works offline');
+    console.log('17. PWA is installable and works offline');
     const pwaPage = await browser.newPage();
     await pwaPage.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
     await pwaPage.goto(server.url, { waitUntil: 'load' });
@@ -1013,7 +1104,7 @@ async function main() {
     await pwaPage.setOfflineMode(false);
     await pwaPage.close();
 
-    console.log('17. face detection failure falls back to a manual crop');
+    console.log('18. face detection failure falls back to a manual crop');
     // Use an isolated context so the PWA's cached MediaPipe assets cannot mask
     // the simulated load failure.
     const offlineContext = await browser.createBrowserContext();
@@ -1060,7 +1151,7 @@ async function main() {
     assert.deepEqual(offlineErrors, []);
     await offlineContext.close();
 
-    console.log('18. removing the photo returns to the empty state');
+    console.log('19. removing the photo returns to the empty state');
     await page.click('#btnRemove');
     await sleep(400);
     assert.equal(await page.$eval('#workspace', (element) => element.hidden), true);

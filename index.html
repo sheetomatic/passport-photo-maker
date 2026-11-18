@@ -4,34 +4,34 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light">
-  <meta name="app-version" content="3">
-  <meta name="description" content="Upload one photo and get six passport-size photos in one row on a print-ready A4 PDF. Everything is processed on your device.">
+  <meta name="app-version" content="4">
+  <meta name="description" content="Create passport photos on one A4 sheet. Adjust the photo in the sidebar, choose quantity and gaps, and watch the print sheet live on your device.">
   <meta name="theme-color" content="#f5f4f1">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Passport Pix">
-  <title>Passport Photo Maker — six photos on one A4 sheet</title>
+  <title>Passport Photo Maker — A4 print sheet</title>
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
   <script type="importmap">
   {
     "imports": {
-      "#app/geometry": "./js/geometry.js?v=3",
-      "#app/image-processing": "./js/image-processing.js?v=3",
-      "#app/crop": "./js/crop.js?v=3",
-      "#app/face-detect": "./js/face-detect.js?v=3",
-      "#app/background": "./js/background.js?v=3",
-      "#app/pdf": "./js/pdf.js?v=3",
-      "#app/print": "./js/print.js?v=3"
+      "#app/geometry": "./js/geometry.js?v=4",
+      "#app/image-processing": "./js/image-processing.js?v=4",
+      "#app/crop": "./js/crop.js?v=4",
+      "#app/face-detect": "./js/face-detect.js?v=4",
+      "#app/background": "./js/background.js?v=4",
+      "#app/pdf": "./js/pdf.js?v=4",
+      "#app/print": "./js/print.js?v=4"
     }
   }
   </script>
-  <link rel="stylesheet" href="styles.css?v=3">
+  <link rel="stylesheet" href="styles.css?v=4">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231d1d1f'/%3E%3Crect x='7' y='9' width='18' height='14' rx='2.5' fill='none' stroke='white' stroke-width='1.6'/%3E%3Ccircle cx='12.5' cy='15' r='2.2' fill='white'/%3E%3Cpath d='M9 21c.6-2 2-3 3.5-3s2.9 1 3.5 3' fill='none' stroke='white' stroke-width='1.4' stroke-linecap='round'/%3E%3Cpath d='M19 14h3M19 18h3' stroke='white' stroke-width='1.3' stroke-linecap='round'/%3E%3C/svg%3E">
 </head>
-<body>
+<body class="app-body">
   <a class="skip-link" href="#main">Skip to content</a>
 
   <header class="site-header">
@@ -66,33 +66,34 @@
     </div>
   </header>
 
-  <main class="shell" id="main">
-    <section class="hero">
-      <p class="eyebrow"><span class="eyebrow-dot"></span> Six-up A4 · print-ready in a minute</p>
-      <h1>Passport Photo Maker</h1>
-      <p class="lede">Upload one photo. Get six passport-size photos ready to print.</p>
+  <main class="app-layout" id="main">
+    <button type="button" class="sidebar-toggle" id="btnOpenSidebar" aria-controls="sidebar" aria-expanded="false">
+      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <path d="M3 6h14M3 10h14M3 14h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        <circle cx="7" cy="6" r="2" fill="var(--surface)"/>
+        <circle cx="13" cy="10" r="2" fill="var(--surface)"/>
+        <circle cx="8" cy="14" r="2" fill="var(--surface)"/>
+      </svg>
+      <span id="sidebarToggleLabel">Adjust</span>
+    </button>
 
-      <ol class="steps" id="stepper" aria-label="Progress">
-        <li class="step is-active" data-step="1">
-          <span class="step-dot" aria-hidden="true">1</span>
-          <span class="step-label">Upload Photo</span>
-        </li>
-        <li class="step" data-step="2">
-          <span class="step-dot" aria-hidden="true">2</span>
-          <span class="step-label">Enhance &amp; Crop</span>
-        </li>
-        <li class="step" data-step="3">
-          <span class="step-dot" aria-hidden="true">3</span>
-          <span class="step-label">Preview</span>
-        </li>
-        <li class="step" data-step="4">
-          <span class="step-dot" aria-hidden="true">4</span>
-          <span class="step-label">Download PDF</span>
-        </li>
-      </ol>
-    </section>
+    <aside class="sidebar" id="sidebar" aria-label="Photo and print settings">
+      <div class="sidebar-head">
+        <div>
+          <p class="sidebar-eyebrow">Passport Photo Maker</p>
+          <h1 class="sidebar-title" id="sidebarStageTitle">Photo setup</h1>
+        </div>
+        <button type="button" class="icon-btn sidebar-close" id="btnCloseSidebar" aria-label="Close settings">×</button>
+      </div>
 
-    <section class="card upload-card" id="uploadCard" aria-labelledby="uploadTitle">
+      <div class="stage-rail" aria-label="Setup steps">
+        <span class="stage-rail-step is-active" id="stageRailPhoto"><b>1</b><span>Photo</span></span>
+        <span class="stage-rail-line" aria-hidden="true"></span>
+        <span class="stage-rail-step" id="stageRailPrint"><b>2</b><span>Print</span></span>
+      </div>
+
+      <div class="sidebar-scroll">
+        <section class="card sidebar-upload" id="uploadCard" aria-labelledby="uploadTitle">
       <div class="upload-copy">
         <h2 id="uploadTitle">Start with one portrait</h2>
         <p>Front-facing, plain background, no sunglasses or headwear.</p>
@@ -138,10 +139,11 @@
       </p>
     </section>
 
-    <div class="workspace" id="workspace" hidden>
-      <aside class="controls" aria-label="Photo and print controls">
+        <div id="workspace" hidden>
+          <section class="stage-panel" id="stagePhoto">
+            <p class="stage-lede">Enhance, clean up and crop the portrait. The A4 sheet on the right updates live.</p>
 
-        <section class="card panel-card" id="photoCard">
+                    <section class="card panel-card" id="photoCard">
           <header class="card-head">
             <h2>Your photo</h2>
             <span class="badge">Local only</span>
@@ -161,7 +163,7 @@
           </div>
         </section>
 
-        <section class="card panel-card" id="enhanceCard">
+                    <section class="card panel-card" id="enhanceCard">
           <header class="card-head">
             <h2>Basic Photo Enhancement</h2>
             <span class="info-tag">On-device</span>
@@ -219,7 +221,7 @@
           </div>
         </section>
 
-        <section class="card panel-card" id="backgroundCard">
+                    <section class="card panel-card" id="backgroundCard">
           <header class="card-head">
             <h2>Background</h2>
             <span class="info-tag">On-device</span>
@@ -271,7 +273,7 @@
           <p class="bg-warning" id="bgWarning" hidden>Automatic cutouts can leave a faint halo around fine hair. Check the preview at full size before printing.</p>
         </section>
 
-        <section class="card panel-card" id="cropCard">
+                    <section class="card panel-card" id="cropCard">
           <header class="card-head">
             <h2>Crop</h2>
             <span class="ratio-tag">7 : 9</span>
@@ -309,149 +311,181 @@
           </div>
         </section>
 
-        <section class="card panel-card" id="layoutCard">
-          <header class="card-head">
-            <h2>Print layout</h2>
-            <span class="info-tag">A4 portrait</span>
-          </header>
-
-          <div class="segmented" role="group" aria-label="Photo size mode">
-            <button type="button" class="seg-btn is-selected" id="modeExact" data-mode="exact" aria-pressed="true">
-              Exact 35 × 45
+            <button type="button" class="btn btn-primary btn-block stage-next" id="btnToPrint">
+              Looks good — print setup
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M3 8h9M8.5 4.5 12 8l-3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
             </button>
-            <button type="button" class="seg-btn" id="modeSafe" data-mode="safe" aria-pressed="false">
-              Printer-safe
-            </button>
-          </div>
-          <p class="mode-note" id="modeNote">Edge-to-edge: six 35 mm photos fill the full 210 mm width. Borderless printing required.</p>
+          </section>
 
-          <div class="safe-options" id="safeOptions" hidden>
-            <div class="field-row">
-              <label for="safeMargin">Safe margin</label>
-              <output id="safeMarginValue" for="safeMargin">6.0 mm</output>
-              <input type="range" id="safeMargin" min="0" max="15" step="0.5" value="6">
-            </div>
-            <div class="field-row">
-              <label for="gap">Gap between photos</label>
-              <output id="gapValue" for="gap">2.0 mm</output>
-              <input type="range" id="gap" min="0" max="8" step="0.25" value="2">
-            </div>
-          </div>
+          <section class="stage-panel" id="stagePrint" hidden>
+            <p class="stage-lede">Choose how many passport-size photos you need and how much space sits between them.</p>
 
-          <div class="position-row">
-            <span class="field-label" id="placementLabel">Row position</span>
-            <div class="segmented compact" role="group" aria-labelledby="placementLabel">
-              <button type="button" class="seg-btn is-selected" id="posTop" data-placement="top" aria-pressed="true">
-                Top
-              </button>
-              <button type="button" class="seg-btn" id="posCentre" data-placement="centre" aria-pressed="false">
-                Centred
-              </button>
-            </div>
-          </div>
-          <div class="field-row">
-            <label for="vertical">Nudge down</label>
-            <output id="verticalValue" for="vertical">None</output>
-            <input type="range" id="vertical" min="0" max="80" step="1" value="0">
-          </div>
+            <section class="card panel-card" id="printCard">
+              <header class="card-head">
+                <h2>Print setup</h2>
+                <span class="info-tag">A4 portrait</span>
+              </header>
 
-          <p class="measure-note">Actual output: <strong id="actualSize">6 × 35.00 × 45.00 mm</strong></p>
+              <div class="size-summary">
+                <div>
+                  <span class="size-label">Passport size</span>
+                  <strong>35 × 45 mm</strong>
+                </div>
+                <span class="size-fixed">Fixed</span>
+              </div>
 
-          <div class="two-col">
-            <label class="select-field" for="guidesSelect">
-              <span>Cut guides</span>
-              <select id="guidesSelect">
-                <option value="cutmarks" selected>Cut marks</option>
-                <option value="hairline">Hairlines</option>
-                <option value="none">None</option>
-              </select>
-            </label>
-            <label class="select-field" for="dpiSelect">
-              <span>Print quality</span>
-              <select id="dpiSelect">
-                <option value="600" selected>600 dpi</option>
-                <option value="300">300 dpi</option>
-              </select>
-            </label>
-          </div>
+              <div class="setting-row">
+                <div class="setting-copy">
+                  <span class="setting-label">Number of photos</span>
+                  <span class="setting-hint">1–24 photos · same passport size</span>
+                </div>
+                <div class="stepper" role="group" aria-label="Number of photos">
+                  <button type="button" class="stepper-btn" id="countMinus" aria-label="One fewer photo">−</button>
+                  <output class="stepper-value" id="countValue">6</output>
+                  <button type="button" class="stepper-btn" id="countPlus" aria-label="One more photo">+</button>
+                </div>
+              </div>
+              <div class="quick-row" aria-label="Quick photo counts">
+                <button type="button" class="quick-chip is-selected" data-count="6">6</button>
+                <button type="button" class="quick-chip" data-count="4">4</button>
+                <button type="button" class="quick-chip" data-count="8">8</button>
+                <button type="button" class="quick-chip" data-count="12">12</button>
+              </div>
 
-          <label class="check-row">
-            <input type="checkbox" id="printedLabels">
-            <span>Print size labels below the photos</span>
-          </label>
-          <label class="check-row">
-            <input type="checkbox" id="showMeasurements" checked>
-            <span>Show measurements on preview</span>
-          </label>
+              <div class="setting-row">
+                <div class="setting-copy">
+                  <span class="setting-label">Gap between photos</span>
+                  <span class="setting-hint">Across and down · 0–8 mm</span>
+                </div>
+                <div class="stepper" role="group" aria-label="Gap between photos">
+                  <button type="button" class="stepper-btn" id="gapMinus" aria-label="Decrease gap">−</button>
+                  <output class="stepper-value" id="gapValue">0.0 mm</output>
+                  <button type="button" class="stepper-btn" id="gapPlus" aria-label="Increase gap">+</button>
+                </div>
+              </div>
+              <div class="quick-row" aria-label="Quick gaps">
+                <button type="button" class="quick-chip is-selected" data-gap="0">0</button>
+                <button type="button" class="quick-chip" data-gap="2">2</button>
+                <button type="button" class="quick-chip" data-gap="4">4</button>
+                <button type="button" class="quick-chip" data-gap="6">6</button>
+              </div>
 
-          <p class="printer-warning" id="printerWarning">Most home printers cannot print to the paper edge. If yours clips the outer photos, switch to Printer-safe.</p>
-        </section>
+              <div class="position-row">
+                <span class="field-label">Vertical position</span>
+                <div class="segmented compact" role="group" aria-label="Vertical position">
+                  <button type="button" class="seg-btn is-selected" id="posTop" data-placement="top" aria-pressed="true">Top</button>
+                  <button type="button" class="seg-btn" id="posCentre" data-placement="centre" aria-pressed="false">Centred</button>
+                </div>
+              </div>
 
-        <section class="card panel-card" id="exportCard">
-          <header class="card-head">
-            <h2>Print file</h2>
-            <span class="badge" id="printReadyBadge">Not generated</span>
-          </header>
-          <ul class="check-list" id="geometryChecks"></ul>
-          <p class="export-note" id="exportNote">Generate a preview to render the full-resolution print file.</p>
-          <button type="button" class="btn btn-block btn-tonal" id="btnGenerateCard">Generate Preview</button>
-        </section>
+              <p class="layout-summary" id="layoutSummary">6 photos · one row · 0 mm gaps</p>
+              <p class="measure-note">Actual output: <strong id="actualSize">6 × 35.00 × 45.00 mm</strong></p>
 
-      </aside>
+              <div class="two-col">
+                <label class="select-field" for="guidesSelect">
+                  <span>Cut guides</span>
+                  <select id="guidesSelect">
+                    <option value="cutmarks" selected>Cut marks</option>
+                    <option value="hairline">Hairlines</option>
+                    <option value="none">None</option>
+                  </select>
+                </label>
+                <label class="select-field" for="dpiSelect">
+                  <span>Print quality</span>
+                  <select id="dpiSelect">
+                    <option value="600" selected>600 dpi</option>
+                    <option value="300">300 dpi</option>
+                  </select>
+                </label>
+              </div>
 
-      <section class="preview-col" aria-label="A4 print preview">
-        <div class="preview-head">
-          <div>
-            <h2>A4 sheet preview</h2>
-            <p id="previewSub">210 × 297 mm portrait · six photos in one row</p>
-          </div>
-          <span class="preview-badge" id="modeBadge">Exact size</span>
+              <label class="check-row">
+                <input type="checkbox" id="printedLabels">
+                <span>Print size labels below the photos</span>
+              </label>
+              <label class="check-row">
+                <input type="checkbox" id="showMeasurements" checked>
+                <span>Show measurements on preview</span>
+              </label>
+
+              <p class="printer-warning" id="printerWarning">These photos span the full A4 width. Print borderless for edge-to-edge output.</p>
+            </section>
+
+            <section class="card panel-card" id="exportCard">
+              <header class="card-head">
+                <h2>Print file</h2>
+                <span class="badge" id="printReadyBadge">Not generated</span>
+              </header>
+
+              <div class="export-summary">
+                <span class="summary-dot" id="summaryDot" aria-hidden="true"></span>
+                <div>
+                  <p class="summary-title" id="summaryTitle">6 × 35.00 × 45.00 mm · A4 portrait</p>
+                  <p class="summary-sub" id="summarySub">Top-aligned · no gaps</p>
+                </div>
+              </div>
+
+              <p class="caption-line" id="captionDims">35.00 × 45.00 mm each · no gaps</p>
+              <dl class="metrics" id="metrics"></dl>
+              <ul class="check-list" id="geometryChecks"></ul>
+              <p class="export-note" id="exportNote">Generate a preview to render the full-resolution print file.</p>
+
+              <div class="export-actions">
+                <button type="button" class="btn btn-outline" id="btnGenerate" disabled>Generate Preview</button>
+                <button type="button" class="btn btn-outline" id="btnPrint" disabled>Print</button>
+                <button type="button" class="btn btn-primary" id="btnDownload" disabled>Download PDF</button>
+              </div>
+            </section>
+
+            <button type="button" class="btn btn-quiet btn-block" id="btnBackToPhoto">Back to photo setup</button>
+            <p class="compliance">
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <circle cx="8" cy="8" r="6.4" stroke="currentColor" stroke-width="1.2"/>
+                <path d="M8 7.2v4M8 4.9v.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              </svg>
+              This tool produces a print sheet, not an official compliance guarantee. Verify local passport requirements before submitting.
+            </p>
+          </section>
         </div>
+      </div>
+    </aside>
 
-        <div class="sheet-stage">
-          <div class="sheet" id="sheet" aria-label="A4 print preview with six identical photos">
-            <div class="sheet-photos" id="sheetPhotos"></div>
-            <svg class="sheet-guides" id="sheetGuides" viewBox="0 0 210 297" preserveAspectRatio="none" aria-hidden="true"></svg>
-            <div class="print-labels" id="printLabels" aria-hidden="true"></div>
-            <div class="measure" id="measureOverlay" aria-hidden="true"></div>
+    <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
+
+    <section class="preview-front" aria-label="A4 print preview">
+      <header class="preview-top">
+        <div class="preview-heading">
+          <p class="preview-kicker" id="previewStageLabel">Photo setup</p>
+          <h2>A4 preview</h2>
+          <p id="previewSub">210 × 297 mm portrait</p>
+        </div>
+        <span class="preview-badge" id="modeBadge">6 photos</span>
+      </header>
+
+      <div class="sheet-stage">
+        <div class="sheet" id="sheet" aria-label="A4 print preview">
+          <div class="sheet-photos" id="sheetPhotos"></div>
+          <div class="print-labels" id="printLabels" aria-hidden="true"></div>
+          <svg class="sheet-guides" id="sheetGuides" viewBox="0 0 210 297" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <div class="measure" id="measureOverlay" aria-hidden="true"></div>
+          <div class="sheet-empty" id="sheetEmpty">
+            <span class="sheet-empty-icon" aria-hidden="true">
+              <svg viewBox="0 0 48 48" fill="none">
+                <rect x="7" y="12" width="34" height="26" rx="5" stroke="currentColor" stroke-width="1.7"/>
+                <circle cx="18" cy="22" r="3.4" stroke="currentColor" stroke-width="1.7"/>
+                <path d="M11 34l7.4-6.2a4 4 0 0 1 5.1 0L31 34" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                <path d="M29 20h6M32 17v6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              </svg>
+            </span>
+            <strong>Your A4 preview</strong>
+            <span>Add a photo in the settings panel to begin.</span>
           </div>
         </div>
-
-        <div class="sheet-caption">
-          <span><span class="legend-swatch page"></span> A4 210 × 297 mm</span>
-          <span><span class="legend-swatch photo"></span> 6 photos, one row</span>
-          <span id="captionDims">35.00 × 45.00 mm each</span>
-        </div>
-
-        <dl class="metrics" id="metrics"></dl>
-
-        <p class="compliance">
-          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <circle cx="8" cy="8" r="6.4" stroke="currentColor" stroke-width="1.2"/>
-            <path d="M8 7.2v4M8 4.9v.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-          </svg>
-          This tool produces a print sheet, not an official compliance guarantee. Passport photo rules differ by country — verify local requirements before submitting.
-        </p>
-      </section>
-    </div>
+      </div>
+    </section>
   </main>
-
-  <footer class="actionbar" id="actionbar">
-    <div class="shell actionbar-inner">
-      <div class="action-summary">
-        <span class="summary-dot" id="summaryDot" aria-hidden="true"></span>
-        <div class="summary-copy">
-          <p class="summary-title" id="summaryTitle">Upload a photo to begin</p>
-          <p class="summary-sub" id="summarySub">Six photos on one A4 portrait sheet · nothing leaves your device</p>
-        </div>
-      </div>
-      <div class="action-buttons">
-        <button type="button" class="btn btn-ghost" id="btnPrint" disabled>Print</button>
-        <button type="button" class="btn btn-outline" id="btnGenerate" disabled>Generate Preview</button>
-        <button type="button" class="btn btn-primary" id="btnDownload" disabled>Download PDF</button>
-      </div>
-    </div>
-  </footer>
 
   <dialog class="dialog install-dialog" id="installDialog" aria-labelledby="installTitle">
     <div class="dialog-inner">
@@ -476,7 +510,7 @@
       <header class="dialog-head">
         <div>
           <h2 id="printTitle">Print at actual size</h2>
-          <p class="dialog-sub" id="printSummary">A4 portrait · six photos at 35.00 × 45.00 mm</p>
+          <p class="dialog-sub" id="printSummary">A4 portrait · 35.00 × 45.00 mm passport photos</p>
         </div>
         <button type="button" class="icon-btn" id="btnClosePrint" aria-label="Close print instructions">×</button>
       </header>
@@ -488,7 +522,7 @@
         <li><span>4</span><p><strong>Turn off</strong> “Fit to page” or “Shrink to fit”.</p></li>
       </ol>
 
-      <p class="dialog-warning" id="printWarning">In Exact mode the photos run to the paper edge. If your printer has non-printable margins, the outer photos may be clipped — use Printer-safe instead.</p>
+      <p class="dialog-warning" id="printWarning">Photos stay exactly 35 × 45 mm. Print at 100% / Actual size; if the sheet runs to the paper edge, borderless printing is required.</p>
 
       <div class="dialog-actions">
         <button type="button" class="btn btn-ghost" id="btnSavePdfPrint" hidden>Save PDF</button>
@@ -501,7 +535,7 @@
   <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 
   <script src="vendor/jspdf.umd.min.js"></script>
-  <script type="module" src="js/app.js?v=3"></script>
-  <script type="module" src="js/pwa.js?v=3"></script>
+  <script type="module" src="js/app.js?v=4"></script>
+  <script type="module" src="js/pwa.js?v=4"></script>
 </body>
 </html>

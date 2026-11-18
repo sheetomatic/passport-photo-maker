@@ -2,7 +2,7 @@
   "name": "passport-photo-maker",
   "version": "1.0.0",
   "private": true,
-  "description": "Browser-only six-up passport photo maker: 35 x 45 mm photos on one A4 portrait sheet.",
+  "description": "Browser-only passport photo maker: exact 35 x 45 mm photos on an A4 sheet with adjustable quantity and gaps.",
   "type": "module",
   "scripts": {
     "dev": "node server.mjs",

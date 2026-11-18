@@ -49,16 +49,11 @@ export function buildPrintDocument({
     : '';
 
   const labels = printedLabels
-    ? layout.photos
-        .map(
-          (photo) =>
-            `<div class="label" style="left:${mmValue(
-              photo.x + photo.widthMm / 2,
-            )}mm;top:${mmValue(photo.y + photo.heightMm + 5)}mm">${layout.photoWidthMm.toFixed(
-              2,
-            )} × ${layout.photoHeightMm.toFixed(2)} mm</div>`,
-        )
-        .join('')
+    ? `<div class="label" style="left:${mmValue(
+        layout.blockX + layout.blockWidth / 2,
+      )}mm;top:${mmValue(layout.blockY + layout.blockHeight + 5)}mm">${layout.photoCount} × ${layout.photoWidthMm.toFixed(
+        2,
+      )} × ${layout.photoHeightMm.toFixed(2)} mm · ${layout.gapMm.toFixed(1)} mm gaps</div>`
     : '';
 
   return `<!doctype html>
