@@ -37,6 +37,7 @@ import { detectFace } from '#app/face-detect';
 import { createBackgroundMask } from '#app/background';
 import { buildPdfDocument, pdfBytes } from '#app/pdf';
 import { buildPrintDocument, printHtmlDocument } from '#app/print';
+import { createBilling } from './billing.js?v=6';
 
 const PREVIEW_MAX_SIDE = 540;
 const PREVIEW_EDITOR_SIDE = 1200;
@@ -202,6 +203,7 @@ const state = {
 };
 
 let cropDrag = null;
+let billing = null;
 
 /* ------------------------------------------------------------------ */
 /* Boot                                                               */
@@ -389,6 +391,8 @@ function bindEvents() {
     window.addEventListener('resize', syncCropImage);
   }
 
+  billing = createBilling({ toast });
+  void billing.init();
   exposeTestApi();
 }
 
@@ -1797,8 +1801,9 @@ async function generatePreview(trigger) {
   }
 }
 
-function downloadPdf() {
+async function downloadPdf() {
   if (!state.photo || state.busy) return;
+  if (billing && !(await billing.authorizeExport('download'))) return;
   runExport(els.btnDownload, async () => {
     const assets = await ensureExportAssets();
     const artifact = createPdfArtifact(assets);
@@ -2126,6 +2131,7 @@ function updatePrintStatus(layout = computeLayout(state.layout), assets = state.
 
 async function openPrintDialog() {
   if (!state.photo || state.busy) return;
+  if (billing && !(await billing.authorizeExport('print'))) return;
   setBusy(true, els.btnPrint);
   state.printDialogOpen = true;
   try {
@@ -2244,6 +2250,7 @@ async function printNow() {
 
 function exposeTestApi() {
   window.__passportApp = {
+    billing,
     state,
     computeLayout,
     getLayout: () => computeLayout(state.layout),

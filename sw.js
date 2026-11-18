@@ -1,23 +1,24 @@
 /* Passport Photo Maker service worker — versioned shell, offline fallback, vendor cache. */
-const CACHE_VERSION = 'ppm-v5';
+const CACHE_VERSION = 'ppm-v6';
 const CACHE = `passport-photo-maker-${CACHE_VERSION}`;
-const ASSET_VERSION = '5';
+const ASSET_VERSION = '6';
 
 const CORE_ASSETS = [
   './',
   './index.html',
   // Versioned shell assets: the page loads these exact URLs, so a deploy can
   // never mix new HTML with an old cached stylesheet or module.
-  './styles.css?v=5',
-  './js/app.js?v=5',
-  './js/geometry.js?v=5',
-  './js/crop.js?v=5',
-  './js/image-processing.js?v=5',
-  './js/face-detect.js?v=5',
-  './js/background.js?v=5',
-  './js/pdf.js?v=5',
-  './js/print.js?v=5',
-  './js/pwa.js?v=5',
+  './styles.css?v=6',
+  './js/app.js?v=6',
+  './js/geometry.js?v=6',
+  './js/crop.js?v=6',
+  './js/image-processing.js?v=6',
+  './js/face-detect.js?v=6',
+  './js/background.js?v=6',
+  './js/pdf.js?v=6',
+  './js/print.js?v=6',
+  './js/pwa.js?v=6',
+  './js/billing.js?v=6',
   // Keep the unversioned copies too so an older open tab cannot break when the
   // previous cache is removed during activation.
   './styles.css',
@@ -31,6 +32,7 @@ const CORE_ASSETS = [
   './js/pdf.js',
   './js/print.js',
   './js/pwa.js',
+  './js/billing.js',
   './vendor/jspdf.umd.min.js',
   './vendor/mediapipe/selfie_segmenter.tflite',
   './icons/icon-192.png',
@@ -116,6 +118,8 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  // Subscription/session/config responses must never be served stale.
+  if (url.pathname.startsWith('/api/')) return;
 
   if (request.mode === 'navigate') {
     event.respondWith(handleNavigation(event));

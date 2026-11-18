@@ -4,9 +4,11 @@ A complete, browser-only passport photo tool built from the supplied DeepSeek pr
 
 Upload one portrait — or take one with your phone camera — → enhance, clean up the background and crop in the sidebar → approve the photo → choose quantity and gaps in print setup → print-ready A4 PDF or direct print.
 
-Everything runs on the device. There is no backend, no account, no analytics, and no photo upload.
+Photo editing runs entirely on the device. A Sheetomatic account is used only for the subscription/licensing and invoice flow; **photos are never uploaded**. There is no analytics.
 
-**Live app:** https://sheetomatic.github.io/passport-photo-maker/ — installable as a PWA.
+**GitHub Pages preview:** https://sheetomatic.github.io/passport-photo-maker/ — free and installable as a PWA.
+
+**Production target:** https://ppm.sheetomatic.com/ — GCP-hosted app with account sign-in, the ₹100/month subscription, and invoices. Billing is only active on this host.
 
 ![Desktop app](screenshots/app-desktop.png)
 
@@ -95,7 +97,20 @@ For local LAN testing, `npm run dev:lan` prints the phone URL (same Wi-Fi; allow
 - **Mobile printing**: Print / Share PDF sends the A4 PDF to the share sheet (AirPrint) on supported phones; without Web Share, the same button opens the browser print dialog with a dedicated exact-size print sheet. Save PDF stays available.
 - **Mobile-friendly drawer**: on a phone the preview fills the screen and a floating **Adjust photo / Print settings** button opens the settings panel; all controls remain reachable with large touch targets and safe-area padding.
 - **Installable PWA**: web app manifest with any/maskable icons, standalone display, a service worker for the offline app shell, and an in-app install flow with iPhone/Android instructions.
-- **Privacy**: photos are decoded and processed in memory with Canvas. No network request leaves the page; even the face-detection model and WASM are vendored locally.
+- **Accounts**: email/password registration and sign-in, with bcrypt-hashed passwords. The first print-ready export is free per account. There is no password-reset email flow yet; support handles resets.
+- **Subscription and invoices**: ₹100/month via Razorpay Subscriptions, with payment history, downloadable invoice/receipt PDFs, and cancellation at the end of the current period.
+- **Privacy**: photos are decoded and processed in memory with Canvas and are never uploaded. Account and billing requests go to the Sheetomatic API; Razorpay receives only the checkout details. The face-detection model and WASM are vendored locally.
+
+## Accounts and billing
+
+- Registration requires name, email, password (8+ characters with a letter and number), and acceptance of the Terms/Privacy Policy.
+- Account sessions are bearer tokens; passwords are bcrypt-hashed and login is rate-limited.
+- The first PDF/print export is free per account. Subsequent exports require an active subscription.
+- The subscription is **₹100/month** through Razorpay. Payment receipts are stored as invoices and can be downloaded as PDF from the account panel.
+- Cancellation is self-serve and takes effect at the end of the current billing period.
+- Billing only activates on the production PPM host; the GitHub Pages preview stays free.
+- Invoices are payment receipts. GST/tax invoicing requires the seller GST configuration; the current receipt says tax treatment is as applicable.
+- This is a client-enforced export gate, not DRM: a user who modifies the static client can bypass it. Hard enforcement would require server-side PDF rendering.
 
 ## The physical geometry
 
@@ -215,7 +230,8 @@ passport-photo-maker/
 │  ├─ face-detect.js           # lazy local MediaPipe loader
 │  ├─ app.js                   # state, staged sidebar, preview, export
 │  ├─ pdf.js                   # jsPDF page and millimetre placements
-│  └─ print.js                 # exact print document + iframe printing
+│  ├─ print.js                 # exact print document + iframe printing
+│  └─ billing.js               # account, subscription, invoices and export gate
 ├─ vendor/
 │  ├─ jspdf.umd.min.js         # pinned jsPDF 2.5.2
 │  └─ mediapipe/               # Tasks Vision 0.10.14, BlazeFace, selfie segmenter model
@@ -288,9 +304,9 @@ Redeploy after changes:
 git add . && git commit -m "Update app" && git push
 ```
 
-The shell is versioned twice for safe upgrades: `styles.css?v=5`, the module
+The shell is versioned twice for safe upgrades: `styles.css?v=6`, the module
 import map and `sw.js` cache version. When changing shell assets, bump all three
-(`v=5` in `index.html`, the import map and `CACHE_VERSION` in `sw.js`). The
+(`v=6` in `index.html`, the import map and `CACHE_VERSION` in `sw.js`). The
 service worker is network-first for HTML/CSS/JS and precaches with `cache:
 'reload'`, so a deployment cannot mix new HTML with an old stylesheet.
 
@@ -317,10 +333,13 @@ or reload the page once; the versioned asset URLs bypass the old cache.
 - The mobile direct-print path relies on the browser's print implementation; the PDF path is the exact, portable fallback.
 - AirPrint/share availability depends on the browser and context, not the app.
 - Face detection is a suggestion, not a guarantee; use the manual crop whenever framing matters.
+- Account, subscription and invoice features require the Sheetomatic API and an internet connection. Photos themselves stay on-device.
+- The ₹100 price is the Razorpay plan amount; GST/tax treatment must be configured separately if applicable.
+- There is no self-serve password reset or email verification yet. Registration accepts an email address without proving ownership; support handles account recovery.
 
 ## Privacy
 
-All decoding, enhancement, background segmentation, face detection, PDF generation and printing happen in the browser. The app makes no external requests. Photos are held in memory only and are never uploaded or persisted; no object URLs are left dangling.
+All photo decoding, enhancement, background segmentation, face detection and PDF generation happen in the browser. **Photos are held in memory only and are never uploaded or persisted.** The account feature sends name, email, password hash and billing identifiers to the Sheetomatic API; payments are processed by Razorpay. The app has no analytics. Object URLs are cleaned up after use.
 
 ## Third-party notices
 

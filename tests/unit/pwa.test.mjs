@@ -57,10 +57,10 @@ test('HTML wires the manifest, icons, theme and PWA script', () => {
   assert.match(html, /<meta name="theme-color" content="#f5f4f1">/);
   assert.match(html, /<meta name="apple-mobile-web-app-capable" content="yes">/);
   assert.match(html, /<link rel="apple-touch-icon" href="icons\/apple-touch-icon\.png">/);
-  assert.match(html, /<script type="module" src="js\/pwa\.js\?v=5"><\/script>/);
+  assert.match(html, /<script type="module" src="js\/pwa\.js\?v=6"><\/script>/);
   assert.match(html, /<script type="importmap">/);
-  assert.match(html, /"#app\/geometry": "\.\/js\/geometry\.js\?v=5"/);
-  assert.match(html, /<link rel="stylesheet" href="styles\.css\?v=5">/);
+  assert.match(html, /"#app\/geometry": "\.\/js\/geometry\.js\?v=6"/);
+  assert.match(html, /<link rel="stylesheet" href="styles\.css\?v=6">/);
   assert.match(html, /id="btnInstall"/);
   assert.match(html, /id="installDialog"/);
 });
