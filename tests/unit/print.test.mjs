@@ -70,6 +70,22 @@ test('print document supports a quantity/gap grid at exact photo size', () => {
   close(photos[1].x - (photos[0].x + photos[0].width), 2, 0.01);
 });
 
+test('print document uses editable non-35 mm dimensions throughout', () => {
+  const layout = computeLayout({
+    photoWidthMm: 33,
+    photoHeightMm: 48,
+    photoCount: 2,
+    gapMm: 4,
+  });
+  const html = buildPrintDocument({ layout, imageDataUrl: IMAGE, guides: 'none' });
+  const photos = parsePhotos(html);
+  assert.equal(photos.length, 2);
+  assert.equal(photos[0].width, 33);
+  assert.equal(photos[0].height, 48);
+  assert.match(html, /width:33mm;height:48mm/);
+  close(photos[1].x - (photos[0].x + photos[0].width), 4, 0.01);
+});
+
 test('cut guides are vector SVG lines tracing each photo', () => {
   const layout = computeLayout();
   const html = buildPrintDocument({ layout, imageDataUrl: IMAGE, guides: 'cutmarks' });

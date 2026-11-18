@@ -1,10 +1,10 @@
 /**
  * geometry.js — the single source of truth for every physical dimension.
  *
- * Photos are always 35 x 45 mm on A4 portrait. The layout supports a
- * configurable quantity and gap; rows are balanced and centred, and the whole
- * block is top-aligned by default. The default (6 photos, 0 mm gap) is the
- * exact edge-to-edge six-up row.
+ * Photos default to 35 x 45 mm, but the width and height are editable. The
+ * layout supports a configurable size, quantity and gap; rows are balanced and
+ * centred, and the whole block is top-aligned by default. The default (6
+ * photos, 0 mm gap, 35 x 45 mm) is the exact edge-to-edge six-up row.
  */
 
 export const PAGE = Object.freeze({ widthMm: 210, heightMm: 297 });
@@ -20,6 +20,8 @@ export const LIMITS = Object.freeze({
   photoCount: { min: 1, max: 24, step: 1, default: 6 },
   gapMm: { min: 0, max: 8, step: 0.5, default: 0 },
   verticalOffsetMm: { min: 0, max: 80, step: 1, default: 0 },
+  photoWidthMm: { min: 15, max: 100, step: 0.1, default: PHOTO.widthMm },
+  photoHeightMm: { min: 15, max: 150, step: 0.1, default: PHOTO.heightMm },
   zoom: { min: 1, max: 4 },
 });
 
@@ -57,13 +59,24 @@ export function layoutKey(layout) {
  *
  * With 35 mm photos and no gap, six fit exactly across the 210 mm width.
  * Adding a gap wraps the block into balanced rows, because six 35 mm photos
- * plus gaps cannot fit in one row. Every photo stays exactly 35 x 45 mm.
+ * plus gaps cannot fit in one row. Every photo keeps the selected physical size.
  */
 export function computeLayout(input = {}) {
   const requestedCount = Math.round(
     numberOr(input.photoCount, LIMITS.photoCount.default),
   );
-  const photoCount = clamp(requestedCount, LIMITS.photoCount.min, LIMITS.photoCount.max);
+
+  // The photo size is user-editable within practical passport ranges.
+  const photoWidthMm = clamp(
+    numberOr(input.photoWidthMm, LIMITS.photoWidthMm.default),
+    LIMITS.photoWidthMm.min,
+    LIMITS.photoWidthMm.max,
+  );
+  const photoHeightMm = clamp(
+    numberOr(input.photoHeightMm, LIMITS.photoHeightMm.default),
+    LIMITS.photoHeightMm.min,
+    LIMITS.photoHeightMm.max,
+  );
   const gapMm = clamp(
     numberOr(input.gapMm, LIMITS.gapMm.default),
     LIMITS.gapMm.min,
@@ -77,13 +90,22 @@ export function computeLayout(input = {}) {
     LIMITS.verticalOffsetMm.max,
   );
 
-  const photoWidthMm = PHOTO.widthMm;
-  const photoHeightMm = PHOTO.heightMm;
-
-  // A gap consumes horizontal space, so fewer photos fit per row.
+  // A gap consumes horizontal space, so fewer photos fit per row. The height
+  // constraint determines how many rows can fit. If the requested quantity is
+  // larger than this sheet capacity, the count is clamped honestly.
   const maxColumns = Math.max(
     1,
     Math.floor((PAGE.widthMm + gapMm) / (photoWidthMm + gapMm)),
+  );
+  const maxRows = Math.max(
+    1,
+    Math.floor((PAGE.heightMm + gapMm) / (photoHeightMm + gapMm)),
+  );
+  const capacity = maxColumns * maxRows;
+  const photoCount = clamp(
+    Math.min(requestedCount, capacity),
+    LIMITS.photoCount.min,
+    LIMITS.photoCount.max,
   );
   const rows = Math.ceil(photoCount / maxColumns);
   const columns = Math.ceil(photoCount / rows);
@@ -127,11 +149,17 @@ export function computeLayout(input = {}) {
     photoCount,
     requestedPhotoCount: requestedCount,
     photoWidthMm,
+    requestedPhotoWidthMm: numberOr(input.photoWidthMm, LIMITS.photoWidthMm.default),
     photoHeightMm,
+    requestedPhotoHeightMm: numberOr(input.photoHeightMm, LIMITS.photoHeightMm.default),
+    aspect: photoWidthMm / photoHeightMm,
     gapMm,
     columns,
     rows,
     maxColumns,
+    maxRows,
+    capacity,
+    countLimited: requestedCount > photoCount,
     blockX,
     blockY,
     blockWidth,
@@ -149,17 +177,19 @@ export function computeLayout(input = {}) {
 }
 
 /**
- * The rendered crop must itself be exactly 7:9. Pick a pixel width that is a
- * multiple of 7 so the integer height (width * 9 / 7) is exact.
+ * Rendered crop pixels. Both dimensions are derived from the selected physical
+ * size and dpi, so a 35 x 45 mm photo is 827 x 1063 px at 600 dpi, a square is
+ * 827 x 827 px, and so on. The crop itself uses the same aspect.
  */
-export function pixelSizeForPhoto(widthMm, dpi) {
-  const raw = (widthMm / 25.4) * dpi;
-  const width = Math.max(7, Math.round(raw / 7) * 7);
-  const height = (width * 9) / 7;
+export function pixelSizeForPhoto(widthMm, heightMm, dpi) {
+  const width = Math.max(1, Math.round((widthMm / 25.4) * dpi));
+  const height = Math.max(1, Math.round((heightMm / 25.4) * dpi));
   return {
     width,
     height,
-    effectiveDpi: width / (widthMm / 25.4),
+    effectiveDpi: Math.round(
+      ((width / (widthMm / 25.4) + height / (heightMm / 25.4)) / 2) * 100,
+    ) / 100,
   };
 }
 
@@ -208,14 +238,15 @@ export function buildGuideSegments(layout, style = 'cutmarks') {
 /** Physical truth checks, surfaced in the UI and enforced before export. */
 export function verifyLayout(layout) {
   const count = layout.photos.length;
+  const selectedAspect = layout.photoWidthMm / layout.photoHeightMm;
   const ratiosExact = layout.photos.every(
-    (photo) => Math.abs(photo.widthMm / photo.heightMm - PHOTO.aspect) < 1e-9,
+    (photo) => Math.abs(photo.widthMm / photo.heightMm - selectedAspect) < 1e-9,
   );
   const pageOk = layout.pageWidthMm === 210 && layout.pageHeightMm === 297;
   const dimsOk = layout.photos.every(
     (photo) =>
-      Math.abs(photo.widthMm - PHOTO.widthMm) < 1e-9 &&
-      Math.abs(photo.heightMm - PHOTO.heightMm) < 1e-9,
+      Math.abs(photo.widthMm - layout.photoWidthMm) < 1e-9 &&
+      Math.abs(photo.heightMm - layout.photoHeightMm) < 1e-9,
   );
   const gapsOk = (() => {
     if (layout.photoCount < 2) return true;
@@ -259,8 +290,16 @@ export function verifyLayout(layout) {
       label: `${layout.photoCount} passport photo${layout.photoCount === 1 ? '' : 's'} on the sheet`,
       pass: count === layout.photoCount,
     },
-    { id: 'dims', label: 'Every photo is exactly 35 × 45 mm', pass: dimsOk },
-    { id: 'ratio', label: 'Every crop is exactly 7:9 (no stretch)', pass: ratiosExact },
+    {
+      id: 'dims',
+      label: `Every photo is exactly ${layout.photoWidthMm.toFixed(2)} × ${layout.photoHeightMm.toFixed(2)} mm`,
+      pass: dimsOk,
+    },
+    {
+      id: 'ratio',
+      label: `Every crop matches the selected ${layout.photoWidthMm.toFixed(2)}:${layout.photoHeightMm.toFixed(2)} ratio (no stretch)`,
+      pass: ratiosExact,
+    },
     { id: 'gaps', label: 'Gaps match the selected spacing', pass: gapsOk },
     {
       id: 'inside',

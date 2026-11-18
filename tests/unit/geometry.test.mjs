@@ -135,18 +135,79 @@ test('top/centre placement and downward nudge stay inside the sheet', () => {
   assert.equal(verifyLayout(clamped).allPass, true);
 });
 
-test('pixel output keeps the exact 7:9 ratio', () => {
-  const at600 = pixelSizeForPhoto(35, 600);
-  assert.equal(at600.width, 826);
-  assert.equal(at600.height, 1062);
-  assert.equal(at600.width % 7, 0);
-  assert.equal(at600.height * 7, at600.width * 9);
-  close(at600.effectiveDpi, 599.44, 0.05);
+test('pixel output follows the selected millimetre size', () => {
+  const standard = pixelSizeForPhoto(35, 45, 600);
+  assert.equal(standard.width, 827);
+  assert.equal(standard.height, 1063);
+  assert.ok(Math.abs(standard.effectiveDpi - 600) < 0.2);
 
-  const at300 = pixelSizeForPhoto(35, 300);
+  const square = pixelSizeForPhoto(35, 35, 600);
+  assert.equal(square.width, 827);
+  assert.equal(square.height, 827);
+
+  const twoInch = pixelSizeForPhoto(50.8, 50.8, 600);
+  assert.equal(twoInch.width, 1200);
+  assert.equal(twoInch.height, 1200);
+
+  const india = pixelSizeForPhoto(33, 48, 600);
+  assert.equal(india.width, 780);
+  assert.equal(india.height, 1134);
+
+  const at300 = pixelSizeForPhoto(35, 45, 300);
   assert.equal(at300.width, 413);
   assert.equal(at300.height, 531);
-  assert.equal(at300.height * 7, at300.width * 9);
+});
+
+test('a custom size keeps exact physical dimensions and adjusts the grid', () => {
+  const layout = computeLayout({
+    photoWidthMm: 50.8,
+    photoHeightMm: 50.8,
+    photoCount: 20,
+    gapMm: 2,
+  });
+  assert.equal(layout.photoWidthMm, 50.8);
+  assert.equal(layout.photoHeightMm, 50.8);
+  assert.equal(layout.photoCount, 20);
+  assert.equal(layout.capacity, 20);
+  assert.equal(layout.columns, 4);
+  assert.equal(layout.rows, 5);
+  close(layout.blockWidth, 4 * 50.8 + 3 * 2, 1e-9);
+  close(layout.blockHeight, 5 * 50.8 + 4 * 2, 1e-9);
+  assert.equal(verifyLayout(layout).allPass, true);
+});
+
+test('large photos clamp the quantity to what actually fits on one sheet', () => {
+  const layout = computeLayout({
+    photoWidthMm: 100,
+    photoHeightMm: 150,
+    photoCount: 24,
+    gapMm: 8,
+  });
+  assert.equal(layout.photoWidthMm, 100);
+  assert.equal(layout.photoHeightMm, 150);
+  assert.equal(layout.capacity, 2);
+  assert.equal(layout.photoCount, 2);
+  assert.equal(layout.countLimited, true);
+  assert.equal(layout.requestedPhotoCount, 24);
+  assert.equal(layout.photos.length, 2);
+  assert.equal(verifyLayout(layout).allPass, true);
+});
+
+test('a custom portrait format keeps its own aspect without stretch', () => {
+  const layout = computeLayout({
+    photoWidthMm: 33,
+    photoHeightMm: 48,
+    photoCount: 6,
+    gapMm: 0,
+  });
+  assert.equal(layout.columns, 6);
+  close(layout.blockWidth, 198);
+  close(layout.blockX, 6);
+  assert.equal(layout.aspect, 33 / 48);
+  for (const photo of layout.photos) {
+    close(photo.widthMm / photo.heightMm, 33 / 48);
+  }
+  assert.equal(verifyLayout(layout).allPass, true);
 });
 
 test('cut guides trace every photo; hairlines cover every edge', () => {

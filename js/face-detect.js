@@ -3,7 +3,7 @@
  *
  * MediaPipe Tasks Vision and the BlazeFace model are vendored under
  * /vendor/mediapipe, so detection works offline and no photo is uploaded.
- * Every failure path is non-fatal: the caller keeps a centred 7:9 crop.
+ * Every failure path is non-fatal: the caller keeps a centred crop at the selected passport ratio.
  */
 
 const BASE_URL = new URL('../vendor/mediapipe/', import.meta.url);

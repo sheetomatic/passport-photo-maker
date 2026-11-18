@@ -2,7 +2,7 @@
   "name": "passport-photo-maker",
   "version": "1.0.0",
   "private": true,
-  "description": "Browser-only passport photo maker: exact 35 x 45 mm photos on an A4 sheet with adjustable quantity and gaps.",
+  "description": "Browser-only passport photo maker: editable photo size, quantity and gaps on an A4 sheet.",
   "type": "module",
   "scripts": {
     "dev": "node server.mjs",

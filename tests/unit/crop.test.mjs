@@ -7,6 +7,7 @@ import {
   cropFractions,
   panCropByPixels,
   setCropZoom,
+  setCropAspect,
   suggestCropFromFace,
   CROP_ASPECT,
 } from '../../js/crop.js';
@@ -166,4 +167,41 @@ test('missing face data falls back to a centred crop', () => {
   close(rect.sx + rect.width / 2, 600);
   close(rect.sy + rect.height / 2, 800);
   close(rect.zoom, 1);
+});
+
+
+test('a square aspect produces a square crop', () => {
+  const state = createCropState(900, 1200, { aspect: 1 });
+  const rect = getCropRect(state);
+  close(rect.width, 900);
+  close(rect.height, 900);
+  close(rect.width / rect.height, 1);
+});
+
+test('changing aspect keeps the centre and changes the crop ratio', () => {
+  const original = createCropState(900, 1200, { aspect: 7 / 9, zoom: 1.2 });
+  const square = setCropAspect(original, 1);
+  assert.equal(square.aspect, 1);
+  close(square.zoom, 1.2);
+  const rect = getCropRect(square);
+  close(rect.width / rect.height, 1);
+  close(rect.cx, original.cx);
+  close(rect.cy, original.cy);
+});
+
+test('face suggestion respects a custom aspect', () => {
+  const face = {
+    x: 330,
+    y: 300,
+    width: 240,
+    height: 300,
+    keypoints: [
+      { x: 0.4, y: 0.42 },
+      { x: 0.6, y: 0.42 },
+    ],
+  };
+  const state = suggestCropFromFace(900, 1200, face, 1);
+  const rect = getCropRect(state);
+  close(rect.width / rect.height, 1);
+  assert.ok(rect.width > 0 && rect.height > 0);
 });

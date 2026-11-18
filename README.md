@@ -41,7 +41,7 @@ Tests use `puppeteer-core`, so install dev dependencies once:
 
 ```bash
 npm install
-npm test          # 42 geometry/crop/PDF/print/upload/PWA tests
+npm test          # 50 geometry/crop/PDF/print/upload/PWA tests
 npm run test:e2e  # real Chrome end-to-end (macOS path auto-detected)
 npm run test:all  # both
 ```
@@ -80,14 +80,15 @@ For local LAN testing, `npm run dev:lan` prints the phone URL (same Wi-Fi; allow
   2. **Print setup** — approve the photo, then choose quantity, spacing, vertical position, guides and output.
 - **Adjustable quantity.** Choose **1–24 passport photos** with the `−` / `+` stepper or the 4/6/8/12 shortcuts. The default is six.
 - **Adjustable gap.** Choose **0–8 mm** in 0.5 mm steps with the `−` / `+` stepper or 0/2/4/6 shortcuts. The gap applies horizontally and vertically.
-- **Every photo stays exactly 35 × 45 mm.** Quantity and gaps never shrink or stretch the photo. If the photos no longer fit in one row, the sheet wraps them into balanced, centred rows.
+- **Editable passport size.** Set width and height in millimetres (15–100 × 15–150 mm) or use the 35 × 45, 35 × 35, 33 × 48 and 2 × 2 in presets. The crop follows the chosen ratio, so photos are never stretched. The default remains 35 × 45 mm.
+- **Quantity and gap never shrink the photo.** If the block no longer fits one row, it wraps into balanced, centred rows. The count is limited to what actually fits on one A4 sheet at the chosen size and gap.
 - **True A4 portrait geometry**: 210 × 297 mm, always one page. Default six photos with no gap is the exact edge-to-edge six-up row.
 - **Top-aligned by default**, with a `Centred` option for the whole photo block.
 - **A4 preview at true proportions** with millimetre measurements, cut guides, and a live metric panel in the sidebar.
 - **Optional cut marks / hairlines / printed size labels**; measurement overlays are preview-only.
 - **Photo Enhancement** using Canvas: auto exposure and grey-world white balance, percentile contrast, warmth, vibrance, multi-scale clarity/sharpening, and a low-strength edge-aware skin-smoothing pass. Original is always preserved; Original/Enhanced comparison, adjustable auto strength, and reset.
 - **Background removal / replacement**: a local MediaPipe selfie segmenter cuts the subject out of the photo and composites it over white, pale blue, light grey, or a custom colour. Edge softness is adjustable, and the original background can be restored instantly. Automatic cutouts are approximate — the UI says to check hair and ears.
-- **Manual 7:9 crop** with drag, wheel/slider zoom, keyboard nudging and reset.
+- **Manual crop at the selected passport ratio** with drag, wheel/slider zoom, keyboard nudging and reset.
 - **Take Photo on mobile** through the native camera, plus Choose Photo, drag/drop, replace and retake. HEIC/HEIF is accepted where the browser can decode it (Safari); other browsers get a clear explanation instead of a silent failure.
 - **Optional face suggestion** using vendored MediaPipe Tasks Vision + BlazeFace. It fails gracefully to a centred crop; photo editing never depends on it.
 - **PDF download** with jsPDF in millimetres, plus a direct print path that uses an A4, zero-margin print document.
@@ -98,27 +99,30 @@ For local LAN testing, `npm run dev:lan` prints the phone URL (same Wi-Fi; allow
 
 ## The physical geometry
 
-Every photo is exactly 35 × 45 mm. Quantity and gap only change how many photos fit per row and how the block is arranged.
+Every photo is exactly the selected width × height. The default is 35 × 45 mm. Size, quantity and gap together determine how many photos fit per row and how the block is arranged. The crop frame switches to the same ratio.
 
-For `N` photos, gap `g`, and A4 width 210 mm:
+For `N` photos of width `w` and height `h`, gap `g`, A4 width 210 mm and height 297 mm:
 
 ```
-max columns = floor((210 + g) / (35 + g))
-rows        = ceil(N / maxColumns)
-columns     = ceil(N / rows)
-block width = columns × 35 + (columns − 1) × g
-block height= rows × 45 + (rows − 1) × g
+max columns = floor((210 + g) / (w + g))
+max rows    = floor((297 + g) / (h + g))
+capacity    = max columns × max rows
+count       = min(N, capacity)          // the UI shows the reduced count
+rows        = ceil(count / maxColumns)
+columns     = ceil(count / rows)
+block width = columns × w + (columns − 1) × g
+block height= rows × h + (rows − 1) × g
 block x     = (210 − block width) / 2
 block y     = 0 (Top) or (297 − block height) / 2 (Centred)
 ```
 
-Rows with fewer photos are centred inside the block. The photo block is inside the A4 page for every supported value.
+Rows with fewer photos are centred inside the block. The count is clamped to the sheet capacity rather than overflowing the page, and the UI reports the reduced limit.
 
 ### Default: six photos, no gap
 
 ```
 page        = 210 × 297 mm (portrait)
-photos      = 6 × 35 × 45 mm
+photos      = 6 × 35 × 45 mm  (default)
 columns     = 6
 rows        = 1
 block       = 210 × 45 mm at x = 0, y = 0
@@ -157,23 +161,26 @@ Still one A4 page.
 
 ### Pixel dimensions
 
-Rendered crop width is always a multiple of 7, so the pixel height is an exact integer and the output is exactly 7:9:
+Rendered pixels follow the selected physical width and height at the chosen dpi. The crop rectangle uses the same ratio, so the portrait is never stretched:
 
 | Photo width | 600 dpi render | Effective dpi |
 | --- | --- | --- |
-| 35 mm | 826 × 1062 px | ≈599 dpi |
-| 35 mm at 300 dpi | 413 × 531 px | ≈300 dpi |
+| 35 × 45 mm at 600 dpi | 827 × 1063 px | ≈600 dpi |
+| 35 × 45 mm at 300 dpi | 413 × 531 px | ≈300 dpi |
+| 35 × 35 mm at 600 dpi | 827 × 827 px | ≈600 dpi |
+| 33 × 48 mm at 600 dpi | 780 × 1134 px | ≈600 dpi |
+| 50.8 × 50.8 mm (2 × 2 in) at 600 dpi | 1200 × 1200 px | ≈600 dpi |
 
-The source crop and target canvas are both 7:9, so images are never stretched.
+The source crop and target canvas share the selected aspect (within a pixel of rounding), so images are never stretched.
 
 ## Workflow
 
 1. **Photo setup (sidebar)** — take a photo with the phone camera, choose from the library, or drag/drop; JPG, PNG, WEBP (and HEIC where supported) up to 40 MB. Type and decode failures show a clear error without breaking the current session.
 2. **Enhance** — Original/Enhanced toggle, auto strength, brightness, contrast, warmth, sharpness and skin smoothing. The original is untouched.
 3. **Background** — switch removal on, pick White/Blue/Grey/Custom, adjust edge softness, or return to Original. The cutout runs locally with the bundled selfie segmenter.
-4. **Crop** — locked 7:9 frame; drag to pan, scroll/slider/± to zoom, arrow keys to nudge, Reset Crop. A face is suggested automatically when the local detector loads.
+4. **Crop** — a frame locked to the selected passport ratio; drag to pan, scroll/slider/± to zoom, arrow keys to nudge, Reset Crop. A face is suggested automatically when the local detector loads.
 5. **Looks good → print setup** — approve the portrait and move to the print stage. The A4 preview remains the only thing on the front.
-6. **Print setup (sidebar)** — passport size is shown as fixed **35 × 45 mm**; adjust quantity, gap, vertical position, cut guides, print quality, printed labels and measurements. The preview updates live.
+6. **Print setup (sidebar)** — edit passport **width and height** (or pick a preset), then adjust quantity, gap, vertical position, cut guides, print quality, printed labels and measurements. The crop frame and preview update live. If a size can only fit fewer photos, the quantity is reduced and the limit is shown.
 7. **Export** — Download PDF (one page) or Print. On mobile, Print / Share PDF uses the share sheet when available and falls back to the system print dialog; desktop uses the browser's print dialog with the A4 sheet.
 8. **Back to photo / Replace / Retake / Remove** — returning preserves the print layout; replacing re-renders every copy; removing resets the layout and returns to the empty preview.
 
@@ -204,7 +211,7 @@ passport-photo-maker/
 │  ├─ geometry.js              # A4 grid maths, guides, verification (source of truth)
 │  ├─ image-processing.js      # decode, tone analysis, skin smoothing, background compositing, crop rendering
 │  ├─ background.js            # lazy local selfie segmentation for cutouts
-│  ├─ crop.js                  # 7:9 crop model, clamping, face framing
+│  ├─ crop.js                  # selected-ratio crop model, clamping, face framing
 │  ├─ face-detect.js           # lazy local MediaPipe loader
 │  ├─ app.js                   # state, staged sidebar, preview, export
 │  ├─ pdf.js                   # jsPDF page and millimetre placements
@@ -231,11 +238,12 @@ passport-photo-maker/
 Run `npm test`:
 
 - Default layout: six photos, 35 × 45 mm, one row, 210 mm wide, gap 0, top 0 mm.
+- Editable sizes: 35 × 35 mm square, 33 × 48 mm, 50.8 × 50.8 mm (2 × 2 in) and custom 40 × 50 mm preserve their own aspect; the crop state follows the size.
 - Quantity/gap layout: 8 photos at 2 mm → 4 × 2, 146 × 92 mm, block x 32 mm; 6 at 2 mm wraps to 3 × 2; 24 at 8 mm fits as 5 × 5 in 207 × 257 mm.
 - Quantity clamps to 1–24, gap clamps to 0–8 mm; Top/Centred placement stays inside the page.
-- Pixel outputs have an exact 7:9 ratio (826 × 1062 at 600 dpi; 413 × 531 at 300 dpi).
+- Pixel outputs follow the selected size: 35 × 45 mm at 600 dpi gives 827 × 1063; 35 × 35 gives 827 × 827; 50.8 × 50.8 gives 1200 × 1200; 35 × 45 at 300 dpi gives 413 × 531.
 - Cut marks trace every photo; hairlines cover every photo edge.
-- PDF `MediaBox` = 595.2756 × 841.8898 pt = 210 × 297 mm; exactly one page; all selected photos at 35 × 45 mm with the requested gaps; multi-row positions checked.
+- PDF `MediaBox` = 595.2756 × 841.8898 pt = 210 × 297 mm; exactly one page; all selected photos at the selected width × height with the requested gaps; multi-row and custom-size positions checked.
 - Print CSS uses `@page { size: 210mm 297mm; margin: 0 }`; all selected images at exact millimetre positions; no body titles.
 - Printed labels are opt-in and render as one block caption, not one overlapping label per photo.
 - Camera-style uploads without an extension, HEIC acceptance, format rejection, empty/oversized files.
@@ -248,6 +256,7 @@ Run `npm run test:e2e` (real Chrome, headless):
 - Upload → live preview with six identical images; default photo positions measured in the browser: 35 × 45 mm at 0, 35, 70 … 175 mm, top 0 mm.
 - Approval gate moves the sidebar to Print setup; Back returns to Photo setup.
 - Quantity/gap controls: eight photos at 2 mm → 4 × 2, 146 × 92 mm block; all eight on the sheet with exact 35 × 45 mm dimensions and 2 mm gaps.
+- Editable size: 35 × 35 square and custom 40 × 50 change the crop aspect and sheet images; resetting to 35 × 45 restores the standard ratio and quantity.
 - Top/Centred placement, measurements, guides (none / hairlines / cut marks) and single printed label.
 - Zoom/drag/reset, Original/Enhanced, adjustment reset.
 - Generate Preview → all geometry checks pass.
@@ -258,7 +267,7 @@ Run `npm run test:e2e` (real Chrome, headless):
 - **Mobile emulation** (iPhone UA, touch, 390 × 844): preview-only front, off-canvas drawer, Adjust/Upload button, Take Photo/Choose Photo in the drawer, `capture="user"` path loads the photo, Retake visible, no horizontal overflow.
 - **Mobile share path**: stubbed Web Share receives a real `application/pdf` File of the print sheet.
 - **Background removal**: white and pale-blue cutouts measured at the sheet corners, Original restored on toggle, and the full-resolution export canvas checked for a white background.
-- **Mobile print fallback**: with sharing disabled, the direct print portal opens with six 35 × 45 mm photos, measured in print media, and produces exactly one A4 page.
+- **Mobile print fallback**: with sharing disabled, the direct print portal opens with the six default 35 × 45 mm photos, measured in print media, and produces exactly one A4 page.
 - **Live GitHub Pages deploy**: installability errors empty, service worker controlling the page, passport photos and face detection working on the deployed HTTPS origin, and an offline reload rendering the app shell.
 - Face detection blocked at the network layer → warning status, manual six-photo flow still works.
 - **PWA installability** via Chrome's `Page.getInstallabilityErrors`: no errors; standalone manifest, three icons and a service worker.
@@ -279,9 +288,9 @@ Redeploy after changes:
 git add . && git commit -m "Update app" && git push
 ```
 
-The shell is versioned twice for safe upgrades: `styles.css?v=4`, the module
+The shell is versioned twice for safe upgrades: `styles.css?v=5`, the module
 import map and `sw.js` cache version. When changing shell assets, bump all three
-(`v=4` in `index.html`, the import map and `CACHE_VERSION` in `sw.js`). The
+(`v=5` in `index.html`, the import map and `CACHE_VERSION` in `sw.js`). The
 service worker is network-first for HTML/CSS/JS and precaches with `cache:
 'reload'`, so a deployment cannot mix new HTML with an old stylesheet.
 
@@ -294,7 +303,7 @@ or reload the page once; the versioned asset URLs bypass the old cache.
 - PWA installation: Chrome/Edge/Android, Safari on iOS/iPadOS. Service workers require HTTPS or localhost.
 - Camera capture uses the platform camera picker; this is a secure-context-independent native input.
 - Web Share with files needs a secure context (HTTPS or localhost). The direct print fallback covers plain HTTP.
-- Face detection needs WebAssembly SIMD (all current mainstream browsers). If it cannot load, the app says so and falls back to a centred 7:9 crop; every other feature works offline.
+- Face detection needs WebAssembly SIMD (all current mainstream browsers). If it cannot load, the app says so and falls back to a centred crop at the selected ratio; every other feature works offline.
 - HEIC/HEIF decoding depends on the browser; Safari on Apple platforms works, most desktop browsers do not. The app explains this if a HEIC file cannot be decoded.
 - The face model and all libraries are loaded from `vendor/` — no CDN.
 
@@ -302,9 +311,9 @@ or reload the page once; the versioned asset URLs bypass the old cache.
 
 - This is a print-sheet tool, **not an official compliance guarantee**. Passport rules vary by country; check requirements (head size, background, expression, recency) before submitting.
 - Automatic background cutouts are approximate around fine hair and thin straps. Inspect the preview at full size, or keep the original background, when edges matter.
-- Photos are always exactly 35 × 45 mm. The sheet supports 1–24 photos and 0–8 mm gaps; larger quantities or gaps are intentionally out of scope.
+- Passport size supports 15–100 × 15–150 mm. The sheet supports 1–24 photos and 0–8 mm gaps; larger sizes/quantities are intentionally out of scope. If a size cannot fit all requested photos, the quantity is reduced to the sheet capacity.
 - A block that reaches the paper edge (notably the default six-up row) depends on borderless printer hardware. Use a gap or fewer photos to create printable margins.
-- Very large images are downscaled to 3200 px on the long edge before processing, which is far above the 826 px print requirement.
+- Very large images are downscaled to 3200 px on the long edge before processing, which is far above the 827 px print requirement at 600 dpi.
 - The mobile direct-print path relies on the browser's print implementation; the PDF path is the exact, portable fallback.
 - AirPrint/share availability depends on the browser and context, not the app.
 - Face detection is a suggestion, not a guarantee; use the manual crop whenever framing matters.

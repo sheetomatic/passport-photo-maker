@@ -1,8 +1,9 @@
 /**
  * app.js — wiring for the Passport Photo Maker.
  *
- * Flow: upload -> analyse/enhance -> 7:9 crop (optional face suggestion) ->
- * live A4 sheet preview -> full-resolution render -> PDF / print.
+ * Flow: upload -> analyse/enhance -> crop at the selected passport ratio
+ * (optional face suggestion) -> live A4 sheet preview -> full-resolution
+ * render -> PDF / print.
  */
 
 import {
@@ -29,6 +30,7 @@ import {
   cropFractions,
   panCropByPixels,
   setCropZoom,
+  setCropAspect,
   suggestCropFromFace,
 } from '#app/crop';
 import { detectFace } from '#app/face-detect';
@@ -36,7 +38,7 @@ import { createBackgroundMask } from '#app/background';
 import { buildPdfDocument, pdfBytes } from '#app/pdf';
 import { buildPrintDocument, printHtmlDocument } from '#app/print';
 
-const PREVIEW_WIDTH = 420; // 7:9 -> 420 x 540
+const PREVIEW_MAX_SIDE = 540;
 const PREVIEW_EDITOR_SIDE = 1200;
 
 const $ = (id) => document.getElementById(id);
@@ -117,6 +119,9 @@ const els = {
 
   posTop: $('posTop'),
   posCentre: $('posCentre'),
+  photoWidth: $('photoWidth'),
+  photoHeight: $('photoHeight'),
+  countHint: $('countHint'),
   countMinus: $('countMinus'),
   countPlus: $('countPlus'),
   countValue: $('countValue'),
@@ -172,6 +177,8 @@ const state = {
   backgroundTimer: 0,
   layout: {
     photoCount: LIMITS.photoCount.default,
+    photoWidthMm: LIMITS.photoWidthMm.default,
+    photoHeightMm: LIMITS.photoHeightMm.default,
     gapMm: LIMITS.gapMm.default,
     verticalPlacement: 'top',
     verticalOffsetMm: 0,
@@ -316,6 +323,21 @@ function bindEvents() {
   for (const button of document.querySelectorAll('[data-gap]')) {
     button.addEventListener('click', () => setGap(Number(button.dataset.gap)));
   }
+  for (const button of document.querySelectorAll('[data-size]')) {
+    button.addEventListener('click', () => {
+      const [width, height] = button.dataset.size.split('x').map(Number);
+      applyPhotoSize(width, height, { announce: true });
+    });
+  }
+  for (const input of [els.photoWidth, els.photoHeight]) {
+    input.addEventListener('change', onSizeInput);
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        input.blur();
+      }
+    });
+  }
 
   els.btnToPrint.addEventListener('click', () => setStage('print'));
   els.btnBackToPhoto.addEventListener('click', () => setStage('photo'));
@@ -395,14 +417,26 @@ function setStage(stage) {
   updateStepper();
   const scroll = els.sidebar.querySelector('.sidebar-scroll');
   scroll?.scrollTo({ top: 0, behavior: 'smooth' });
+  if (state.stage === 'photo') {
+    window.requestAnimationFrame(() => syncCropImage());
+  }
 }
 
 function setPhotoCount(value) {
-  const next = Math.round(
+  const requested = Math.round(
     Math.min(LIMITS.photoCount.max, Math.max(LIMITS.photoCount.min, value)),
   );
-  if (next === state.layout.photoCount) return;
-  state.layout = { ...state.layout, photoCount: next };
+  if (requested === state.layout.photoCount) return;
+  state.layout = { ...state.layout, photoCount: requested };
+  const layout = computeLayout(state.layout);
+  if (layout.photoCount !== requested) {
+    state.layout = { ...state.layout, photoCount: layout.photoCount };
+    toast(
+      `Only ${layout.photoCount} photo${layout.photoCount === 1 ? '' : 's'} fit at this size and gap on one A4 sheet.`,
+      'error',
+      4500,
+    );
+  }
   syncLayoutInputs();
   refreshLayout();
 }
@@ -417,12 +451,85 @@ function setGap(value) {
   const next = Math.min(LIMITS.gapMm.max, Math.max(LIMITS.gapMm.min, rounded));
   if (Math.abs(next - state.layout.gapMm) < 1e-9) return;
   state.layout = { ...state.layout, gapMm: next };
+  const layout = computeLayout(state.layout);
+  if (layout.photoCount !== state.layout.photoCount) {
+    state.layout = { ...state.layout, photoCount: layout.photoCount };
+    toast(
+      `Only ${layout.photoCount} photo${layout.photoCount === 1 ? '' : 's'} fit with this size and gap.`,
+      'error',
+      4500,
+    );
+  }
   syncLayoutInputs();
   refreshLayout();
 }
 
 function changeGap(delta) {
   setGap(state.layout.gapMm + delta);
+}
+
+function formatSizeValue(value) {
+  return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1);
+}
+
+function onSizeInput() {
+  const width = Number(els.photoWidth.value);
+  const height = Number(els.photoHeight.value);
+  if (!Number.isFinite(width) || !Number.isFinite(height)) {
+    syncLayoutInputs();
+    return;
+  }
+  applyPhotoSize(width, height, { announce: true });
+}
+
+function applyPhotoSize(widthValue, heightValue, { announce = false } = {}) {
+  const width = Math.min(
+    LIMITS.photoWidthMm.max,
+    Math.max(LIMITS.photoWidthMm.min, Math.round(widthValue * 10) / 10),
+  );
+  const height = Math.min(
+    LIMITS.photoHeightMm.max,
+    Math.max(LIMITS.photoHeightMm.min, Math.round(heightValue * 10) / 10),
+  );
+
+  if (
+    Math.abs(width - state.layout.photoWidthMm) < 1e-9 &&
+    Math.abs(height - state.layout.photoHeightMm) < 1e-9
+  ) {
+    syncLayoutInputs();
+    return;
+  }
+
+  state.layout = {
+    ...state.layout,
+    photoWidthMm: width,
+    photoHeightMm: height,
+  };
+  const layout = computeLayout(state.layout);
+  const limited = layout.photoCount !== state.layout.photoCount;
+  state.layout = { ...state.layout, photoCount: layout.photoCount };
+
+  if (state.crop) {
+    state.crop = setCropAspect(state.crop, width / height);
+    syncCropFrameAspect();
+    syncCropImage();
+  }
+
+  syncLayoutInputs();
+  invalidateExport(layout);
+  updateLayoutUI();
+  updatePrintStatus(layout);
+  scheduleSheet(0);
+
+  if (announce) {
+    toast(
+      limited
+        ? `Photo size ${formatSizeValue(width)} × ${formatSizeValue(height)} mm. Only ${layout.photoCount} fit on this sheet, so the quantity was reduced.`
+        : `Photo size ${formatSizeValue(width)} × ${formatSizeValue(height)} mm. The crop frame now matches this ratio.`,
+      'success',
+      4500,
+    );
+  }
 }
 
 function onDragOver(event) {
@@ -492,7 +599,10 @@ async function handleFile(file) {
 
 function startSession(photo) {
   state.photo = photo;
-  state.crop = createCropState(photo.width, photo.height, { zoom: 1 });
+  state.crop = createCropState(photo.width, photo.height, {
+    zoom: 1,
+    aspect: getPhotoAspect(),
+  });
   state.cropTouched = false;
   state.enhance = { enabled: true, ...DEFAULT_ENHANCE_SETTINGS };
   state.background = { enabled: false, color: '#ffffff', feather: 20 };
@@ -588,6 +698,8 @@ function removePhoto() {
   window.clearTimeout(state.backgroundTimer);
   state.layout = {
     photoCount: LIMITS.photoCount.default,
+    photoWidthMm: LIMITS.photoWidthMm.default,
+    photoHeightMm: LIMITS.photoHeightMm.default,
     gapMm: LIMITS.gapMm.default,
     verticalPlacement: 'top',
     verticalOffsetMm: 0,
@@ -904,8 +1016,18 @@ function buildEditorEnhancement() {
 /* Crop                                                               */
 /* ------------------------------------------------------------------ */
 
+function syncCropFrameAspect() {
+  if (!state.crop) return;
+  const aspect = state.crop.aspect;
+  // Cap the on-screen frame height while keeping its exact width:height ratio.
+  const frameWidth = Math.min(286, 380 * aspect);
+  els.cropFrame.style.aspectRatio = String(aspect);
+  els.cropFrame.style.width = `${Math.max(1, frameWidth)}px`;
+}
+
 function syncCropImage() {
   if (!state.photo || !state.crop) return;
+  syncCropFrameAspect();
   const frameWidth = els.cropFrame.clientWidth;
   const frameHeight = els.cropFrame.clientHeight;
   if (!frameWidth || !frameHeight) return;
@@ -1021,11 +1143,14 @@ function nudgeZoom(factor) {
 
 function resetCrop() {
   if (!state.photo) return;
-  state.crop = createCropState(state.photo.width, state.photo.height, { zoom: 1 });
+  state.crop = createCropState(state.photo.width, state.photo.height, {
+    zoom: 1,
+    aspect: getPhotoAspect(),
+  });
   state.cropTouched = false;
   syncCropImage();
   scheduleSheet(0);
-  setFaceStatus('idle', 'Centred 7:9 crop. Drag to fine-tune.');
+  setFaceStatus('idle', 'Centred crop. Drag to fine-tune.');
 }
 
 function setFaceStatus(kind, text) {
@@ -1048,13 +1173,18 @@ async function runFaceDetection({ manual = false } = {}) {
       return;
     }
     if (!box) {
-      setFaceStatus('warn', 'No face detected — centred 7:9 crop applied.');
+      setFaceStatus('warn', 'No face detected — centred crop applied.');
       if (manual) toast('No face found. You can position the crop manually.', 'error');
       return;
     }
 
     if (!state.cropTouched || manual) {
-      state.crop = suggestCropFromFace(state.photo.width, state.photo.height, box);
+      state.crop = suggestCropFromFace(
+        state.photo.width,
+        state.photo.height,
+        box,
+        getPhotoAspect(),
+      );
       state.cropTouched = false;
       syncCropImage();
       scheduleSheet(0);
@@ -1067,7 +1197,7 @@ async function runFaceDetection({ manual = false } = {}) {
     }
   } catch (error) {
     console.warn('Face detection unavailable', error);
-    setFaceStatus('warn', 'Face detection unavailable — centred 7:9 crop.');
+    setFaceStatus('warn', 'Face detection unavailable — centred crop.');
     if (manual) {
       toast('Face detection could not load. Adjust the crop manually.', 'error', 5000);
     }
@@ -1100,18 +1230,33 @@ function arrangementLabel(layout) {
 
 function syncLayoutInputs() {
   const layout = computeLayout(state.layout);
+  const maxCount = Math.min(LIMITS.photoCount.max, layout.capacity);
+  els.photoWidth.value = formatSizeValue(layout.photoWidthMm);
+  els.photoHeight.value = formatSizeValue(layout.photoHeightMm);
   els.countValue.textContent = String(layout.photoCount);
   els.gapValue.textContent = `${layout.gapMm.toFixed(1)} mm`;
   els.countMinus.disabled = layout.photoCount <= LIMITS.photoCount.min;
-  els.countPlus.disabled = layout.photoCount >= LIMITS.photoCount.max;
+  els.countPlus.disabled = layout.photoCount >= maxCount;
   els.gapMinus.disabled = layout.gapMm <= LIMITS.gapMm.min;
   els.gapPlus.disabled = layout.gapMm >= LIMITS.gapMm.max;
+  els.countHint.textContent =
+    maxCount >= LIMITS.photoCount.max
+      ? '1–24 photos · same passport size'
+      : `1–${maxCount} at this size and gap · one sheet`;
+
+  for (const button of document.querySelectorAll('[data-size]')) {
+    const [width, height] = button.dataset.size.split('x').map(Number);
+    const selected =
+      Math.abs(width - layout.photoWidthMm) < 1e-9 &&
+      Math.abs(height - layout.photoHeightMm) < 1e-9;
+    button.classList.toggle('is-selected', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  }
 
   for (const button of document.querySelectorAll('[data-count]')) {
-    button.classList.toggle(
-      'is-selected',
-      Number(button.dataset.count) === layout.photoCount,
-    );
+    const quickCount = Number(button.dataset.count);
+    button.classList.toggle('is-selected', quickCount === layout.photoCount);
+    button.disabled = quickCount > maxCount;
   }
   for (const button of document.querySelectorAll('[data-gap]')) {
     button.classList.toggle(
@@ -1152,14 +1297,15 @@ function updateLayoutUI() {
     layout.photoCount === 1 ? '' : 's'
   } · ${arrangementLabel(layout)} · ${layout.gapMm.toFixed(1)} mm gaps`;
 
+  const sizeLabel = `${layout.photoWidthMm.toFixed(2)} × ${layout.photoHeightMm.toFixed(2)} mm`;
   const edgeToEdge = layout.blockWidth >= 210 - 1e-6;
   els.printerWarning.textContent = edgeToEdge
     ? 'These photos span the full A4 width. Print borderless for edge-to-edge output.'
     : layout.rows > 1
-      ? `Photos stay exactly 35 × 45 mm. The sheet uses ${layout.blockX.toFixed(
+      ? `Photos stay exactly ${sizeLabel}. The sheet uses ${layout.blockX.toFixed(
           2,
         )} mm side margins and ${layout.rows} rows — print at 100% / actual size.`
-      : `Photos stay exactly 35 × 45 mm. Side margins are ${layout.blockX.toFixed(
+      : `Photos stay exactly ${sizeLabel}. Side margins are ${layout.blockX.toFixed(
           2,
         )} mm — print at 100% / actual size.`;
 
@@ -1195,7 +1341,9 @@ function updateSheetPreview() {
   if (!state.photo || !state.crop) return;
   const crop = getCropRect(state.crop);
   const background = getBackgroundSettings();
-  const canvas = renderCrop(state.photo.source, crop, PREVIEW_WIDTH, {
+  const preview = previewPixelSize(state.crop.aspect);
+  const canvas = renderCrop(state.photo.source, crop, preview.width, {
+    targetHeight: preview.height,
     enhance: state.enhance.enabled,
     analysis: state.photo.analysis,
     settings: getEnhanceSettings(),
@@ -1395,13 +1543,13 @@ function clampMm(value) {
 }
 
 function renderMetrics(layout) {
-  const px = pixelSizeForPhoto(layout.photoWidthMm, state.dpi);
+  const px = pixelSizeForPhoto(layout.photoWidthMm, layout.photoHeightMm, state.dpi);
   const rows = [
     ['Sheet', 'A4 portrait', '210.00 × 297.00 mm', false],
     [
       'Photos',
       `${layout.photoCount} × ${layout.photoWidthMm.toFixed(2)} × ${layout.photoHeightMm.toFixed(2)} mm`,
-      '7:9 · exact passport size',
+      `${layout.photoWidthMm.toFixed(2)}:${layout.photoHeightMm.toFixed(2)} · selected size`,
       false,
     ],
     [
@@ -1452,8 +1600,9 @@ function updateActionSummary(layout = computeLayout(state.layout)) {
   els.summaryDot.classList.toggle('is-ready', hasPhoto);
   if (!hasPhoto) {
     els.summaryTitle.textContent = 'Add a photo to begin';
-    els.summarySub.textContent =
-      'A4 portrait · exact 35 × 45 mm passport photos';
+    els.summarySub.textContent = `A4 portrait · ${layout.photoWidthMm.toFixed(
+      2,
+    )} × ${layout.photoHeightMm.toFixed(2)} mm passport photos`;
     return;
   }
   els.summaryTitle.textContent = `${layout.photoCount} × ${layout.photoWidthMm.toFixed(
@@ -1526,8 +1675,25 @@ function toast(message, type = 'success', timeout = 4200) {
 /* Export                                                             */
 /* ------------------------------------------------------------------ */
 
+function getPhotoAspect(layout = computeLayout(state.layout)) {
+  return layout.photoWidthMm / layout.photoHeightMm;
+}
+
+function previewPixelSize(aspect = getPhotoAspect()) {
+  if (aspect >= 1) {
+    return {
+      width: PREVIEW_MAX_SIDE,
+      height: Math.max(1, Math.round(PREVIEW_MAX_SIDE / aspect)),
+    };
+  }
+  return {
+    width: Math.max(1, Math.round(PREVIEW_MAX_SIDE * aspect)),
+    height: PREVIEW_MAX_SIDE,
+  };
+}
+
 function currentPixelSize(layout = computeLayout(state.layout)) {
-  return pixelSizeForPhoto(layout.photoWidthMm, state.dpi);
+  return pixelSizeForPhoto(layout.photoWidthMm, layout.photoHeightMm, state.dpi);
 }
 
 function exportKey() {
@@ -1584,6 +1750,7 @@ async function ensureExportAssets({ force = false } = {}) {
   const crop = getCropRect(state.crop);
   const background = getBackgroundSettings();
   const canvas = renderCrop(state.photo.source, crop, px.width, {
+    targetHeight: px.height,
     enhance: state.enhance.enabled,
     analysis: state.photo.analysis,
     settings: getEnhanceSettings(),
@@ -1825,7 +1992,7 @@ function sharePrintPdf(assets = state.printAssets ?? state.exportAssets) {
     sharePromise = navigator.share({
       files: [file],
       title: 'Passport photos — A4',
-      text: `${assets.layout.photoCount} × 35 × 45 mm passport photos on one A4 page. Print at 100% / actual size.`,
+      text: `${assets.layout.photoCount} × ${assets.layout.photoWidthMm.toFixed(2)} × ${assets.layout.photoHeightMm.toFixed(2)} mm passport photos on one A4 page. Print at 100% / actual size.`,
     });
   } catch (error) {
     console.warn('Share could not start', error);
@@ -1921,7 +2088,12 @@ function updatePrintStatus(layout = computeLayout(state.layout), assets = state.
     displayChecks.push({
       id: 'render',
       label: `Print image ${px.width} × ${px.height} px (${Math.round(px.effectiveDpi)} dpi)`,
-      pass: px.width % 7 === 0 && px.height * 7 === px.width * 9,
+      pass:
+        Math.abs(
+          px.width / px.height - layout.photoWidthMm / layout.photoHeightMm,
+        ) /
+          (layout.photoWidthMm / layout.photoHeightMm) <
+        0.002,
     });
   }
 

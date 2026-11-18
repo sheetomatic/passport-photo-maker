@@ -1,41 +1,50 @@
 /**
- * crop.js — pure crop maths for a strict 7:9 frame.
+ * crop.js — pure crop maths for a configurable width:height frame.
  *
  * The crop window is represented in source-image pixels by its centre (cx, cy)
- * and a zoom factor. At zoom 1 the window covers the largest 7:9 rectangle that
- * fits inside the photo (cover), so there is never any empty space.
+ * and a zoom factor. At zoom 1 the window covers the largest rectangle with the
+ * selected aspect ratio that fits inside the photo (cover), so there is never
+ * any empty space. The default aspect is 35:45.
  */
 
 import { clamp, LIMITS } from '#app/geometry';
 
-export const CROP_ASPECT = 7 / 9; // width / height
+export const CROP_ASPECT = 7 / 9; // default 35:45 width / height
 
-/** Largest 7:9 rectangle that fits inside the photo (the zoom-1 crop). */
-export function baseCropWidthFor(imageWidth, imageHeight) {
-  return Math.min(imageWidth, imageHeight * CROP_ASPECT);
+function validAspect(value) {
+  const aspect = Number(value);
+  return Number.isFinite(aspect) && aspect > 0 ? aspect : CROP_ASPECT;
+}
+
+/** Largest rectangle with the selected aspect that fits inside the photo. */
+export function baseCropWidthFor(imageWidth, imageHeight, aspect = CROP_ASPECT) {
+  return Math.min(imageWidth, imageHeight * validAspect(aspect));
 }
 
 export function cropWindow(state) {
-  const baseWidth = baseCropWidthFor(state.imageWidth, state.imageHeight);
+  const aspect = validAspect(state.aspect);
+  const baseWidth = baseCropWidthFor(state.imageWidth, state.imageHeight, aspect);
   const zoom = clamp(state.zoom, LIMITS.zoom.min, LIMITS.zoom.max);
   const cropWidth = baseWidth / zoom;
-  const cropHeight = cropWidth / CROP_ASPECT;
+  const cropHeight = cropWidth / aspect;
   return {
     baseWidth,
     cropWidth,
     cropHeight,
+    aspect,
     zoom,
     minCropWidth: baseWidth / LIMITS.zoom.max,
   };
 }
 
 export function clampCrop(state) {
-  const { cropWidth, cropHeight, zoom } = cropWindow(state);
+  const { cropWidth, cropHeight, aspect, zoom } = cropWindow(state);
   const cx = clamp(state.cx, cropWidth / 2, state.imageWidth - cropWidth / 2);
   const cy = clamp(state.cy, cropHeight / 2, state.imageHeight - cropHeight / 2);
   return {
     imageWidth: state.imageWidth,
     imageHeight: state.imageHeight,
+    aspect,
     zoom,
     cx,
     cy,
@@ -47,15 +56,21 @@ export function createCropState(imageWidth, imageHeight, options = {}) {
   return clampCrop({
     imageWidth,
     imageHeight,
+    aspect: validAspect(options.aspect),
     zoom,
     cx: options.cx ?? imageWidth / 2,
     cy: options.cy ?? imageHeight / 2,
   });
 }
 
+/** Change the frame aspect while keeping the same centre and zoom. */
+export function setCropAspect(state, aspect) {
+  return clampCrop({ ...state, aspect: validAspect(aspect) });
+}
+
 /** Source-pixel rectangle handed to canvas drawImage(). */
 export function getCropRect(state) {
-  const { cropWidth, cropHeight } = cropWindow(state);
+  const { cropWidth, cropHeight, aspect } = cropWindow(state);
   const clamped = clampCrop(state);
   const sx = clamp(clamped.cx - cropWidth / 2, 0, state.imageWidth - cropWidth);
   const sy = clamp(clamped.cy - cropHeight / 2, 0, state.imageHeight - cropHeight);
@@ -66,6 +81,7 @@ export function getCropRect(state) {
     height: cropHeight,
     cx: clamped.cx,
     cy: clamped.cy,
+    aspect,
     zoom: clamped.zoom,
   };
 }
@@ -79,8 +95,8 @@ export function setCropZoom(state, zoom, anchor) {
 export function panCropByPixels(state, dxPx, dyPx, frameWidthPx) {
   const { cropWidth } = cropWindow(state);
   if (!frameWidthPx) return state;
-  // The frame and the crop share the 7:9 aspect, so one conversion works for
-  // both axes: moving the image right by N screen pixels moves the crop left
+  // The frame and the crop share the selected aspect, so one conversion works
+  // for both axes: moving the image right by N screen pixels moves the crop left
   // by N / (frameWidth / cropWidth) source pixels.
   const pxPerSourcePx = frameWidthPx / cropWidth;
   return clampCrop({
@@ -101,17 +117,28 @@ export function panCropByPixels(state, dxPx, dyPx, frameWidthPx) {
  * With landmarks this works across hair styles; without them, the box centre is
  * used as a fallback eye line.
  */
-export function suggestCropFromFace(imageWidth, imageHeight, faceBox) {
-  const { baseWidth } = cropWindow({ imageWidth, imageHeight, zoom: 1 });
+export function suggestCropFromFace(
+  imageWidth,
+  imageHeight,
+  faceBox,
+  aspect = CROP_ASPECT,
+) {
+  const frameAspect = validAspect(aspect);
+  const { baseWidth } = cropWindow({
+    imageWidth,
+    imageHeight,
+    aspect: frameAspect,
+    zoom: 1,
+  });
   if (!faceBox || !(faceBox.width > 0) || !(faceBox.height > 0)) {
-    return createCropState(imageWidth, imageHeight);
+    return createCropState(imageWidth, imageHeight, { aspect: frameAspect });
   }
 
   const faceCenterX = faceBox.x + faceBox.width / 2;
   let cropWidth = faceBox.width / 0.64;
   const minWidth = baseWidth / LIMITS.zoom.max;
   cropWidth = clamp(cropWidth, minWidth, baseWidth);
-  const cropHeight = cropWidth / CROP_ASPECT;
+  const cropHeight = cropWidth / frameAspect;
 
   const eyeY = averageEyeY(faceBox, imageWidth, imageHeight);
   const cropTop = clamp(
@@ -122,6 +149,7 @@ export function suggestCropFromFace(imageWidth, imageHeight, faceBox) {
   const zoom = baseWidth / cropWidth;
 
   return createCropState(imageWidth, imageHeight, {
+    aspect: frameAspect,
     zoom,
     cx: faceCenterX,
     cy: cropTop + cropHeight / 2,

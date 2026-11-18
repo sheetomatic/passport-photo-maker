@@ -647,6 +647,82 @@ async function main() {
     await sleep(250);
     assert.equal(await page.$$eval('#printLabels .print-label', (labels) => labels.length), 0);
 
+    console.log('9b. editable passport size updates the crop and sheet');
+    await page.click('[data-size="35x35"]');
+    await page.waitForFunction(
+      () => Math.abs(window.__passportApp.getLayout().photoWidthMm - 35) < 1e-9 &&
+        Math.abs(window.__passportApp.getLayout().photoHeightMm - 35) < 1e-9,
+      { timeout: 5000 },
+    );
+    await sleep(500);
+    const squareLayout = await page.evaluate(() => window.__passportApp.getLayout());
+    assert.equal(squareLayout.photoWidthMm, 35);
+    assert.equal(squareLayout.photoHeightMm, 35);
+    assert.equal(squareLayout.aspect, 1);
+    close(
+      await page.evaluate(() => window.__passportApp.state.crop.aspect),
+      1,
+      1e-9,
+      'crop square aspect',
+    );
+    let squareGeometry = await getSheetGeometry(page);
+    close(
+      squareGeometry.images[0].width / squareGeometry.images[0].height,
+      1,
+      0.01,
+      'square sheet image',
+    );
+
+    await page.evaluate(() => {
+      const width = document.getElementById('photoWidth');
+      const height = document.getElementById('photoHeight');
+      width.value = '40';
+      height.value = '50';
+      height.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await page.waitForFunction(
+      () => Math.abs(window.__passportApp.getLayout().photoWidthMm - 40) < 1e-9 &&
+        Math.abs(window.__passportApp.getLayout().photoHeightMm - 50) < 1e-9,
+      { timeout: 5000 },
+    );
+    await sleep(500);
+    const customLayout = await page.evaluate(() => window.__passportApp.getLayout());
+    assert.equal(customLayout.photoWidthMm, 40);
+    assert.equal(customLayout.photoHeightMm, 50);
+    assert.equal(await page.$eval('#photoWidth', (el) => el.value), '40');
+    assert.equal(await page.$eval('#photoHeight', (el) => el.value), '50');
+    close(customLayout.aspect, 0.8, 1e-9, 'custom aspect');
+    close(
+      await page.evaluate(() => window.__passportApp.state.crop.aspect),
+      0.8,
+      1e-9,
+      'crop custom aspect',
+    );
+    assert.equal(customLayout.photoCount, 8);
+    assert.equal(customLayout.gapMm, 2);
+
+    await page.click('[data-size="35x45"]');
+    await page.waitForFunction(
+      () => Math.abs(window.__passportApp.getLayout().photoWidthMm - 35) < 1e-9 &&
+        Math.abs(window.__passportApp.getLayout().photoHeightMm - 45) < 1e-9,
+      { timeout: 5000 },
+    );
+    await sleep(600);
+    const restoredLayout = await page.evaluate(() => window.__passportApp.getLayout());
+    assert.equal(restoredLayout.photoWidthMm, 35);
+    assert.equal(restoredLayout.photoHeightMm, 45);
+    assert.equal(restoredLayout.photoCount, 8);
+    assert.equal(restoredLayout.gapMm, 2);
+    assert.equal(await page.$eval('#photoWidth', (el) => el.value), '35');
+    assert.equal(await page.$eval('#photoHeight', (el) => el.value), '45');
+    squareGeometry = await getSheetGeometry(page);
+    close(
+      squareGeometry.images[0].width / squareGeometry.images[0].height,
+      35 / 45,
+      0.01,
+      'restored sheet image ratio',
+    );
+
     console.log('10. generate full-resolution preview');
     await page.click('#btnGenerate');
     await page.waitForFunction(
@@ -686,8 +762,8 @@ async function main() {
     const pdfInfo = await page.evaluate(() => window.__passportApp.generatePdfBytes());
     assert.equal(pdfInfo.allPass, true);
     assert.equal(pdfInfo.layout.photos.length, 8);
-    assert.equal(pdfInfo.pixels.width % 7, 0);
-    assert.equal(pdfInfo.pixels.height * 7, pdfInfo.pixels.width * 9);
+    close(pdfInfo.pixels.width / pdfInfo.pixels.height, 35 / 45, 0.002, 'print pixel ratio');
+    assert.ok(pdfInfo.pixels.width > 800 && pdfInfo.pixels.height > 1000);
     const pdfBuffer = Buffer.from(pdfInfo.bytes);
     const parsed = parsePdfMediaBox(pdfBuffer);
     close(parsed.widthPt, 595.2756, 0.05, 'PDF width pt');

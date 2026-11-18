@@ -827,6 +827,7 @@ input[type="range"] {
 .crop-frame {
   position: relative;
   width: min(100%, 286px);
+  max-width: 100%;
   aspect-ratio: 7 / 9;
   overflow: hidden;
   border-radius: var(--radius-md);
@@ -2819,6 +2820,16 @@ input[type="range"] {
   color: #fff;
 }
 
+.quick-chip:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.quick-chip:disabled:hover {
+  border-color: var(--line);
+  color: var(--muted);
+}
+
 .layout-summary {
   margin-top: 16px;
   padding: 9px 11px;
@@ -3124,4 +3135,114 @@ body.sidebar-open .sidebar-toggle {
   .preview-front .sheet {
     width: min(100%, calc((100dvh - 180px) * 0.7071));
   }
+}
+
+/* Editable passport size */
+.size-editor {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.size-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.size-edit-note {
+  color: var(--faint);
+  font-size: 9.5px;
+  font-weight: 550;
+  letter-spacing: 0.02em;
+}
+
+.size-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.size-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.size-field > span:first-child {
+  color: var(--faint);
+  font-size: 9.5px;
+  font-weight: 550;
+}
+
+.size-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #fff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.size-input-wrap:focus-within {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px rgba(27, 27, 30, 0.07);
+}
+
+.size-input-wrap input {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.size-input-wrap input::-webkit-outer-spin-button,
+.size-input-wrap input::-webkit-inner-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.size-unit {
+  flex: none;
+  color: var(--faint);
+  font-size: 9.5px;
+}
+
+.size-times {
+  padding-bottom: 9px;
+  color: var(--faint);
+  font-size: 13px;
+}
+
+.size-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 9px;
+}
+
+.size-hint {
+  margin-top: 7px;
+  color: var(--faint);
+  font-size: 9.5px;
+  line-height: 1.4;
 }

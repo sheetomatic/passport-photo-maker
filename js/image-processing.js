@@ -593,12 +593,15 @@ export function compositeBackground(canvas, maskCanvas, options = {}) {
 }
 
 /**
- * Render the crop at exactly 7:9. targetWidth should be a multiple of 7 so the
- * pixel geometry is exact as well.
+ * Render the selected crop at the requested pixel size. targetHeight defaults
+ * to the 7:9 fallback for callers that only care about a standard crop.
  */
 export function renderCrop(source, cropRect, targetWidth, options = {}) {
-  const width = Math.max(7, Math.round(targetWidth / 7) * 7);
-  const height = (width * 9) / 7;
+  const width = Math.max(1, Math.round(targetWidth));
+  const height = Math.max(
+    1,
+    Math.round(options.targetHeight ?? (width * 9) / 7),
+  );
   const { canvas, context } = filledCanvas(width, height);
 
   const sx = clamp(cropRect.sx, 0, Math.max(0, source.width - 1));

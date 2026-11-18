@@ -137,6 +137,33 @@ test('PDF supports a multi-row quantity with exact 35 x 45 mm photos and gaps', 
   close(toMm(secondRow[0].yPt), 297 - (47 + 45), 0.002);
 });
 
+test('PDF accepts an editable square passport size', async () => {
+  const jsPDF = await getJsPDF();
+  const layout = computeLayout({
+    photoWidthMm: 50.8,
+    photoHeightMm: 50.8,
+    photoCount: 4,
+    gapMm: 2,
+  });
+  const result = buildPdfDocument({
+    jsPDF,
+    layout,
+    imageDataUrl: PNG_1PX,
+    imageFormat: 'PNG',
+    guides: 'none',
+    compress: false,
+  });
+  assert.equal(result.allPass, true);
+  const text = Buffer.from(result.doc.output('arraybuffer')).toString('latin1');
+  const placements = parsePlacements(text);
+  assert.equal(placements.length, 4);
+  for (const placement of placements) {
+    close(toMm(placement.widthPt), 50.8, 0.002);
+    close(toMm(placement.heightPt), 50.8, 0.002);
+    close(placement.widthPt / placement.heightPt, 1, 1e-9);
+  }
+});
+
 test('Compressed PDF (the production path) still reports A4 page size', async () => {
   const jsPDF = await getJsPDF();
   const layout = computeLayout();

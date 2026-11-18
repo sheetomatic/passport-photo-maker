@@ -2,7 +2,7 @@
   "id": "./",
   "name": "Passport Photo Maker",
   "short_name": "Passport Pix",
-  "description": "Create 35 × 45 mm passport photos on one A4 sheet. Choose quantity and gaps; photos and face detection stay on your device.",
+  "description": "Create passport photos on one A4 sheet. Edit the size, quantity and gaps; photos and face detection stay on your device.",
   "lang": "en",
   "dir": "ltr",
   "start_url": "./",

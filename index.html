@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light">
-  <meta name="app-version" content="4">
-  <meta name="description" content="Create passport photos on one A4 sheet. Adjust the photo in the sidebar, choose quantity and gaps, and watch the print sheet live on your device.">
+  <meta name="app-version" content="5">
+  <meta name="description" content="Create passport photos on one A4 sheet. Edit the passport size, quantity and gaps in the sidebar, and watch the print sheet live on your device.">
   <meta name="theme-color" content="#f5f4f1">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -18,17 +18,17 @@
   <script type="importmap">
   {
     "imports": {
-      "#app/geometry": "./js/geometry.js?v=4",
-      "#app/image-processing": "./js/image-processing.js?v=4",
-      "#app/crop": "./js/crop.js?v=4",
-      "#app/face-detect": "./js/face-detect.js?v=4",
-      "#app/background": "./js/background.js?v=4",
-      "#app/pdf": "./js/pdf.js?v=4",
-      "#app/print": "./js/print.js?v=4"
+      "#app/geometry": "./js/geometry.js?v=5",
+      "#app/image-processing": "./js/image-processing.js?v=5",
+      "#app/crop": "./js/crop.js?v=5",
+      "#app/face-detect": "./js/face-detect.js?v=5",
+      "#app/background": "./js/background.js?v=5",
+      "#app/pdf": "./js/pdf.js?v=5",
+      "#app/print": "./js/print.js?v=5"
     }
   }
   </script>
-  <link rel="stylesheet" href="styles.css?v=4">
+  <link rel="stylesheet" href="styles.css?v=5">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231d1d1f'/%3E%3Crect x='7' y='9' width='18' height='14' rx='2.5' fill='none' stroke='white' stroke-width='1.6'/%3E%3Ccircle cx='12.5' cy='15' r='2.2' fill='white'/%3E%3Cpath d='M9 21c.6-2 2-3 3.5-3s2.9 1 3.5 3' fill='none' stroke='white' stroke-width='1.4' stroke-linecap='round'/%3E%3Cpath d='M19 14h3M19 18h3' stroke='white' stroke-width='1.3' stroke-linecap='round'/%3E%3C/svg%3E">
 </head>
 <body class="app-body">
@@ -328,18 +328,41 @@
                 <span class="info-tag">A4 portrait</span>
               </header>
 
-              <div class="size-summary">
-                <div>
+              <div class="size-editor">
+                <div class="size-editor-head">
                   <span class="size-label">Passport size</span>
-                  <strong>35 × 45 mm</strong>
+                  <span class="size-edit-note">Editable · mm</span>
                 </div>
-                <span class="size-fixed">Fixed</span>
+                <div class="size-fields">
+                  <label class="size-field">
+                    <span>Width</span>
+                    <span class="size-input-wrap">
+                      <input id="photoWidth" type="number" min="15" max="100" step="0.1" inputmode="decimal" value="35" aria-label="Photo width in millimetres">
+                      <span class="size-unit">mm</span>
+                    </span>
+                  </label>
+                  <span class="size-times" aria-hidden="true">×</span>
+                  <label class="size-field">
+                    <span>Height</span>
+                    <span class="size-input-wrap">
+                      <input id="photoHeight" type="number" min="15" max="150" step="0.1" inputmode="decimal" value="45" aria-label="Photo height in millimetres">
+                      <span class="size-unit">mm</span>
+                    </span>
+                  </label>
+                </div>
+                <div class="size-presets" role="group" aria-label="Passport size presets">
+                  <button type="button" class="quick-chip is-selected" data-size="35x45">35 × 45</button>
+                  <button type="button" class="quick-chip" data-size="35x35">35 × 35</button>
+                  <button type="button" class="quick-chip" data-size="33x48">33 × 48</button>
+                  <button type="button" class="quick-chip" data-size="50.8x50.8">2 × 2 in</button>
+                </div>
+                <p class="size-hint">15–100 × 15–150 mm · the crop follows this ratio</p>
               </div>
 
               <div class="setting-row">
                 <div class="setting-copy">
                   <span class="setting-label">Number of photos</span>
-                  <span class="setting-hint">1–24 photos · same passport size</span>
+                  <span class="setting-hint" id="countHint">1–24 photos · same passport size</span>
                 </div>
                 <div class="stepper" role="group" aria-label="Number of photos">
                   <button type="button" class="stepper-btn" id="countMinus" aria-label="One fewer photo">−</button>
@@ -410,7 +433,7 @@
                 <span>Show measurements on preview</span>
               </label>
 
-              <p class="printer-warning" id="printerWarning">These photos span the full A4 width. Print borderless for edge-to-edge output.</p>
+              <p class="printer-warning" id="printerWarning">Photos keep the selected passport size. Print at 100% / actual size.</p>
             </section>
 
             <section class="card panel-card" id="exportCard">
@@ -522,7 +545,7 @@
         <li><span>4</span><p><strong>Turn off</strong> “Fit to page” or “Shrink to fit”.</p></li>
       </ol>
 
-      <p class="dialog-warning" id="printWarning">Photos stay exactly 35 × 45 mm. Print at 100% / Actual size; if the sheet runs to the paper edge, borderless printing is required.</p>
+      <p class="dialog-warning" id="printWarning">Photos keep the selected passport size. Print at 100% / Actual size; if the sheet runs to the paper edge, borderless printing is required.</p>
 
       <div class="dialog-actions">
         <button type="button" class="btn btn-ghost" id="btnSavePdfPrint" hidden>Save PDF</button>
@@ -535,7 +558,7 @@
   <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 
   <script src="vendor/jspdf.umd.min.js"></script>
-  <script type="module" src="js/app.js?v=4"></script>
-  <script type="module" src="js/pwa.js?v=4"></script>
+  <script type="module" src="js/app.js?v=5"></script>
+  <script type="module" src="js/pwa.js?v=5"></script>
 </body>
 </html>
